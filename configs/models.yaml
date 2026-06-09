@@ -1,0 +1,33 @@
+# Maps logical agent roles -> backend keys, and backend keys -> concrete models.
+# Swap open-source <-> frontier per agent here, no code changes.
+# Backend strings are LiteLLM model ids (provider/model).
+
+agents:
+  planner: local-qwen14b
+  retriever: local-qwen14b
+  neuro_entity: local-qwen14b
+  synthesizer: claude-sonnet   # quality where it matters; flip to local-qwen14b to run fully offline
+  critic: claude-sonnet
+
+backends:
+  local-qwen14b:
+    model: "ollama/qwen2.5:14b-instruct-q4_K_M"
+    api_base: "http://localhost:11434"
+  local-llama8b:
+    model: "ollama/llama3.1:8b-instruct-q4_K_M"
+    api_base: "http://localhost:11434"
+  local-deepseek:
+    model: "ollama/deepseek-r1:14b"
+    api_base: "http://localhost:11434"
+  claude-sonnet:
+    model: "anthropic/claude-sonnet-4-6"   # needs ANTHROPIC_API_KEY
+  claude-opus:
+    model: "anthropic/claude-opus-4-8"
+  gpt:
+    model: "openai/gpt-4o"                  # needs OPENAI_API_KEY
+
+# Embeddings run locally via Ollama (Mac) or point api_base at the 4060 box.
+embeddings:
+  model: "bge-m3"
+  api_base: "http://localhost:11434"
+  dim: 1024

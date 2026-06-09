@@ -1,0 +1,17 @@
+# Retrieval + graph parameters.
+index:
+  uri: "data/lancedb"
+  table: "scireg"
+  chunk_size: 1024
+  chunk_overlap: 128
+
+retrieval:
+  top_k: 12          # dense candidates
+  bm25_k: 12         # sparse candidates
+  final_k: 6         # passed to synthesizer after fusion
+  hybrid: true       # dense + BM25 reciprocal-rank fusion
+
+sources:
+  pubmed:
+    default_retmax: 25
+    # NCBI politeness: <=3 req/s without key, 10 with NCBI_API_KEY in .env
