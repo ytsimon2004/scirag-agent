@@ -47,10 +47,24 @@ def _prompt() -> HTML:
     return HTML("<ansigreen><b>scirag</b></ansigreen> <ansicyan>❯</ansicyan> ")
 
 
+_LOGO = """\
+ ______     ______     __     ______     ______     ______
+/\\  ___\\   /\\  ___\\   /\\ \\   /\\  == \\   /\\  __ \\   /\\  ___\\
+\\ \\___  \\  \\ \\ \\____  \\ \\ \\  \\ \\  __<   \\ \\  __ \\  \\ \\ \\__ \\
+ \\/\\_____\\  \\ \\_____\\  \\ \\_\\  \\ \\_\\ \\_\\  \\ \\_\\ \\_\\  \\ \\_____\\
+  \\/_____/   \\/_____/   \\/_/   \\/_/ /_/   \\/_/\\/_/   \\/_____/
+"""
+
+_TAGLINE = "agent  ·  neuroscience RAG  ·  PubMed / PMC"
+
+
 def _banner() -> None:
+    from rich.markup import escape
     console.print()
-    console.print("[bold green]scirag[/] [dim]— multi-agent RAG for scientific literature[/]")
-    console.print("[dim]Type [/][cyan]/help[/][dim] for commands, [/][cyan]/exit[/][dim] to quit.[/]")
+    for line in _LOGO.splitlines():
+        console.print(f"[bold green]{escape(line)}[/]")
+    console.print(f"[dim]  {_TAGLINE}[/]")
+    console.print("[dim]  /help for commands  ·  /exit to quit[/]")
     console.print()
     # Show active project + index status
     try:
@@ -60,9 +74,9 @@ def _banner() -> None:
         pmids = get_indexed_pmids()
         label = f"project [cyan]{project}[/]" if project else "global index"
         if pmids:
-            console.print(f"[dim]{label} — {len(pmids)} article(s) stored.[/]\n")
+            console.print(f"[dim]  {label} — {len(pmids)} article(s) stored.[/]\n")
         else:
-            console.print(f"[dim]{label} is empty — run [/][cyan]/index <query>[/][dim] to populate.[/]\n")
+            console.print(f"[dim]  {label} is empty — run [/][cyan]/index <query>[/][dim] to populate.[/]\n")
     except Exception:
         pass
 
