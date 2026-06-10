@@ -21,6 +21,7 @@ _COMMANDS: dict[str, str] = {
     "/model":          "[backend-key]                       — list or switch LLM backend",
     "/import-pdf":     "<path>                              — index a single PDF (Results section only)",
     "/import-dir":     "<path>                              — index all PDFs in a directory",
+    "/env":            "[set <KEY> <val> | unset <KEY>]     — manage API keys in ~/.scirag-agent/.env",
     "/status":         "                                    — show index statistics",
     "/clear-db":       "[--force]                           — delete the active index",
     "/create-project": "<name> [description]               — create a new project and switch to it",
@@ -121,6 +122,14 @@ def _dispatch(line: str) -> None:
 
     if cmd == "/clear":
         console.clear()
+        return
+
+    if cmd == "/env":
+        from scirag.cli import do_env
+        action = positional[0] if positional else ""
+        key    = positional[1] if len(positional) > 1 else ""
+        value  = " ".join(positional[2:]) if len(positional) > 2 else ""
+        do_env(action, key, value)
         return
 
     if cmd == "/status":

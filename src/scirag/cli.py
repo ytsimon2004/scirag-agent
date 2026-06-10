@@ -353,6 +353,97 @@ def do_import_dir(path: str) -> None:
     console.print("[green]Indexed.[/]")
 
 
+_ENV_KEYS = {
+    "NCBI_API_KEY":       "NCBI API key — raises rate limit from 3 to 10 req/s",
+    "NCBI_EMAIL":         "Email sent with NCBI requests (politeness header)",
+    "ANTHROPIC_API_KEY":  "Required for claude-sonnet / claude-opus backends",
+    "OPENAI_API_KEY":     "Required for gpt backend",
+}
+
+_HOME_ENV = Path.home() / ".scirag-agent" / ".env"
+
+
+def _mask(value: str) -> str:
+    return value[:4] + "****" if len(value) > 4 else "****"
+
+
+def _read_home_env() -> dict[str, str]:
+    """Parse ~/.scirag-agent/.env into a dict."""
+    if not _HOME_ENV.exists():
+        return {}
+    result = {}
+    for line in _HOME_ENV.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, _, v = line.partition("=")
+        result[k.strip()] = v.strip().strip('"').strip("'")
+    return result
+
+
+def _write_home_env(env: dict[str, str]) -> None:
+    _HOME_ENV.parent.mkdir(parents=True, exist_ok=True)
+    _HOME_ENV.write_text("\n".join(f'{k}="{v}"' for k, v in env.items()) + "\n")
+
+
+def do_env(action: str = "", key: str = "", value: str = "") -> None:
+    """Show, set, or unset environment variables in ~/.scirag-agent/.env."""
+    import os
+    from rich.table import Table
+
+    home_env = _read_home_env()
+
+    if not action:
+        table = Table(box=None, padding=(0, 2), show_header=True, header_style="bold")
+        table.add_column("Key",         style="cyan",  no_wrap=True)
+        table.add_column("Status",      no_wrap=True)
+        table.add_column("Value",       style="dim",   no_wrap=True)
+        table.add_column("Description", style="dim")
+        for k, desc in _ENV_KEYS.items():
+            live    = os.getenv(k, "")
+            stored  = home_env.get(k, "")
+            if live:
+                status  = "[green]set[/]"
+                display = _mask(live)
+                if not stored:
+                    display += "  [dim](local .env only)[/]"
+            else:
+                status  = "[red]missing[/]"
+                display = ""
+            table.add_row(k, status, display, desc)
+        console.print(table)
+        console.print(f"\n[dim]Stored in: {_HOME_ENV}[/]")
+        console.print("[dim]Usage: /env set <KEY> <value>   /env unset <KEY>[/]")
+        return
+
+    if action == "set":
+        if not key or not value:
+            console.print("[yellow]Usage:[/] /env set <KEY> <value>")
+            return
+        if key not in _ENV_KEYS:
+            import questionary
+            if not questionary.confirm(f"{key!r} is not a known key. Save anyway?").ask():
+                return
+        home_env[key] = value
+        _write_home_env(home_env)
+        os.environ[key] = value
+        console.print(f"[green]Set[/] {key} = {_mask(value)}  [dim](saved to {_HOME_ENV})[/]")
+        return
+
+    if action == "unset":
+        if not key:
+            console.print("[yellow]Usage:[/] /env unset <KEY>")
+            return
+        if home_env.pop(key, None):
+            _write_home_env(home_env)
+            console.print(f"[green]Removed[/] {key} from {_HOME_ENV}")
+        else:
+            console.print(f"[yellow]{key} not in {_HOME_ENV}[/]")
+        return
+
+    console.print(f"[red]Unknown action:[/] {action!r}  (use: set / unset)")
+
+
 def do_status() -> None:
     from scirag.ingest.index import get_indexed_pmids
     pmids = get_indexed_pmids()
@@ -468,6 +559,16 @@ def delete_project_cmd(
         pass
     else:
         console.print("[dim]Switched to default global index.[/]")
+
+
+@app.command()
+def env(
+    action: str = typer.Argument("", help="Action: set / unset. Omit to list."),
+    key: str = typer.Argument("", help="Environment variable name."),
+    value: str = typer.Argument("", help="Value to set."),
+):
+    """Show, set, or unset API keys stored in ~/.scirag-agent/.env."""
+    do_env(action, key, value)
 
 
 if __name__ == "__main__":

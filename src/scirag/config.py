@@ -9,7 +9,9 @@ from typing import Any
 import yaml
 from dotenv import load_dotenv
 
-load_dotenv()
+_HOME_ENV = Path.home() / ".scirag-agent" / ".env"
+load_dotenv(_HOME_ENV)          # primary user config
+load_dotenv(override=True)      # local .env overrides (dev use)
 
 ROOT = Path(__file__).resolve().parents[2]
 
