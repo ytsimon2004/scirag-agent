@@ -1,16 +1,13 @@
 # scireg — Multi-agent RAG for scientific literature
 
 Neuroscience-focused retrieval-augmented generation over PubMed/PMC, built with
-**LlamaIndex** (indexing/retrieval), **LangChain** (LLM/tool adapters), and
-**LangGraph** (agent orchestration). LLM backends — open-source (Ollama:
-Qwen/Llama/DeepSeek) and frontier (Claude/OpenAI) — sit behind one LiteLLM
-router, selectable per agent.
+**LlamaIndex** (indexing/retrieval) and **LiteLLM** (LLM routing). LLM backends —
+open-source (Ollama: Qwen/Llama/DeepSeek) and frontier (Claude/OpenAI) — sit behind
+one LiteLLM router, selectable per agent.
 
 ## Framework division of labor
 - **LlamaIndex** — ingestion, chunking, embeddings, LanceDB vector store, retrievers.
-- **LangChain** — thin adapters (LLM wrappers, document loaders, MCP tool bindings).
-- **LangGraph** — the orchestration state machine (supervisor, agent routing, critic loops).
-Keep these boundaries; don't reimplement one layer's job in another.
+- **LiteLLM** — unified LLM router across local and frontier backends.
 
 ## Environment & setup
 - **uv** manages everything. Python 3.11.
@@ -37,8 +34,7 @@ Keep these boundaries; don't reimplement one layer's job in another.
 - `src/scireg/retrieval/retriever.py` — hybrid dense + BM25 with RRF fusion.
 - `src/scireg/neuro/entities.py` — neuro entity extraction + query expansion (extension point).
 - `src/scireg/agents/synthesize.py` — cited-answer synthesis agent.
-- `src/scireg/graph/state.py` — LangGraph `State` + `build_graph()`.
-- `src/scireg/mcp_server/server.py` — exposes retrieval as MCP tools.
+- `src/scireg/mcp_server/server.py` — exposes retrieval as MCP tools (optional extra).
 - `src/scireg/cli.py` — `scireg search|index|ask`.
 
 ## Run
@@ -59,8 +55,8 @@ uv run python -m scireg.mcp_server.server                 # MCP server (needs --
   `sources/` with ad-hoc HTTP calls elsewhere.
 
 ## Roadmap (multi-agent buildout)
-The current graph is linear (`extract_entities -> retrieve -> synthesize`). Next:
-supervisor/router node in front; query-planner (MeSH expansion); reranker (move
-`bge-reranker-v2-m3` to the 4060); **critic/verifier** loop that scores citation
-grounding and routes back to `retrieve` on failure; real ontology resolvers in
+Current pipeline is linear (`extract_entities -> retrieve -> synthesize`). Next:
+LangGraph for conditional routing — critic/verifier loop that scores citation grounding
+and routes back to `retrieve` on failure; supervisor/router node; query-planner
+(MeSH expansion); reranker (`bge-reranker-v2-m3`); real ontology resolvers in
 `neuro/` (Allen Brain Atlas, NCBI Gene, UniProt, ChEBI, MeSH).

@@ -1,5 +1,4 @@
-"""MCP server exposing scirag's retrieval tools over the Model Context Protocol,
-so the same data layer is reusable by LangGraph agents, Claude Desktop, etc.
+"""MCP server exposing scirag's retrieval tools over the Model Context Protocol.
 
 Run:  uv run python -m scirag.mcp_server.server
 Requires the `mcp` extra:  uv sync --extra mcp
@@ -32,10 +31,14 @@ def search_pubmed(query: str, retmax: int = 25) -> list[dict]:
 
 @mcp.tool()
 def ask_index(query: str) -> str:
-    """Run the local multi-agent RAG graph and return a cited answer."""
-    from scirag.graph.state import build_graph
+    """Retrieve from the local index and return a cited answer."""
+    from scirag.agents.synthesize import synthesize
+    from scirag.neuro.entities import expand_query, extract_entities
+    from scirag.retrieval.retriever import retrieve
 
-    return build_graph().invoke({"query": query}).get("answer", "")
+    ents = extract_entities(query)
+    nodes = retrieve(expand_query(query, ents))
+    return synthesize(query, nodes)
 
 
 if __name__ == "__main__":
