@@ -24,6 +24,12 @@ ollama pull qwen2.5:14b-instruct-q4_K_M   # LLM (~9 GB)
 ollama pull bge-m3                         # embeddings (~1.2 GB)
 ```
 
+### Web UI (optional)
+
+```
+uv sync --extra ui
+```
+
 ### API keys (optional — needed only for frontier backends)
 
 ```
@@ -121,6 +127,25 @@ scirag ❯ /llm "Which cell types mediate this?"   # follow-up
 scirag ❯ /llm --reset                            # clear history
 ```
 
+### 5 — Web UI
+
+```
+scirag ❯ /llm-ui              # opens http://localhost:8000
+scirag ❯ /llm-ui --port 8080  # custom port
+```
+
+Requires `uv sync --extra ui` first. Features:
+
+- Chat interface with streaming responses
+- Retrieved sources shown inline before each answer (title, year, source type, snippet)
+- Full source text accessible in the sidebar
+- General questions answered from LLM knowledge; research questions trigger RAG automatically
+- ⚙️ settings panel to switch LLM backend mid-conversation
+- `/reset` in chat to clear conversation history
+
+The web UI and shell share the same index and project — index papers in the
+shell, ask questions in the browser, or mix both freely.
+
 ---
 
 ## Projects
@@ -174,6 +199,7 @@ is never modified.
 | `/index <query> [--retmax N] [--full-text]` | Fetch, preview, select, embed |
 | `/retrieve <query>` | Query local index (no LLM) |
 | `/llm <question> [--reset]` | RAG answer with sources + conversation memory |
+| `/llm-ui [--port N]` | Open Chainlit web UI in browser |
 | `/model [backend-key]` | List or switch LLM backend |
 | `/import-pdf <path>` | Index a single PDF (Results section only) |
 | `/import-dir <path>` | Index all PDFs in a directory |

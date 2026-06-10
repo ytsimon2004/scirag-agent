@@ -444,6 +444,51 @@ def do_env(action: str = "", key: str = "", value: str = "") -> None:
     console.print(f"[red]Unknown action:[/] {action!r}  (use: set / unset)")
 
 
+def do_llm_ui(port: int = 8000) -> None:
+    """Launch the Chainlit web UI and open it in the browser."""
+    import subprocess
+    import time
+    import webbrowser
+    from pathlib import Path
+
+    try:
+        import chainlit  # noqa: F401
+    except ImportError:
+        console.print(
+            "[red]chainlit not installed.[/] Run: [cyan]uv sync --extra ui[/]"
+        )
+        return
+
+    ui_path = Path(__file__).parent / "ui.py"
+    url = f"http://localhost:{port}"
+    console.print(f"Starting web UI at [link={url}]{url}[/link] …")
+
+    proc = subprocess.Popen(
+        ["uv", "run", "--extra", "ui", "chainlit", "run", str(ui_path),
+         "--port", str(port), "--headless"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    # Poll until the server is up (max 10 s)
+    import httpx
+    for _ in range(20):
+        time.sleep(0.5)
+        try:
+            httpx.get(url, timeout=0.5)
+            break
+        except Exception:
+            pass
+
+    webbrowser.open(url)
+    console.print(f"[green]Web UI open.[/] Press [bold]Ctrl+C[/] to stop.")
+    try:
+        proc.wait()
+    except KeyboardInterrupt:
+        proc.terminate()
+        console.print("\n[dim]Web UI stopped.[/]")
+
+
 def do_status() -> None:
     from scirag.ingest.index import get_indexed_pmids
     pmids = get_indexed_pmids()
@@ -508,6 +553,12 @@ def llm(
 ):
     """Ask a question grounded in the indexed papers, with conversation memory."""
     do_llm(query, reset=reset)
+
+
+@app.command(name="llm-ui")
+def llm_ui(port: int = typer.Option(8000, "--port", "-p", help="Port to listen on.")):
+    """Launch the Chainlit web UI for RAG chat."""
+    do_llm_ui(port)
 
 
 @app.command(name="import-pdf")

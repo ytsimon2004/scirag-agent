@@ -18,6 +18,7 @@ _COMMANDS: dict[str, str] = {
     "/index":          "<query> [--retmax N] [--full-text]  — interactive fetch + select + index",
     "/retrieve":       "<query>                             — query local index (no LLM)",
     "/llm":            "<question> [--reset]               — RAG answer with sources + conversation memory",
+    "/llm-ui":         "[--port N]                          — open Chainlit web UI in browser",
     "/model":          "[backend-key]                       — list or switch LLM backend",
     "/import-pdf":     "<path>                              — index a single PDF (Results section only)",
     "/import-dir":     "<path>                              — index all PDFs in a directory",
@@ -305,6 +306,11 @@ def _dispatch(line: str) -> None:
         else:
             from scirag.cli import do_llm
             do_llm(query)
+
+    elif cmd == "/llm-ui":
+        from scirag.cli import do_llm_ui
+        port = int(flags.get("port", 8000))
+        do_llm_ui(port)
 
     elif cmd == "/model":
         from scirag.cli import do_model

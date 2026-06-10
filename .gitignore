@@ -27,3 +27,7 @@ data/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Chainlit auto-generated files
+chainlit.md
+.chainlit/

@@ -31,3 +31,28 @@ def complete(
         kwargs["api_base"] = backend["api_base"]
     resp = litellm.completion(**kwargs)
     return resp["choices"][0]["message"]["content"]
+
+
+async def complete_stream(
+    agent: str,
+    messages: list[dict[str, str]],
+    *,
+    temperature: float = 0.2,
+    max_tokens: int = 1200,
+):
+    """Async streaming completion — yields text tokens as they arrive."""
+    backend = backend_for(agent)
+    kwargs: dict = {
+        "model": backend["model"],
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "stream": True,
+    }
+    if "api_base" in backend:
+        kwargs["api_base"] = backend["api_base"]
+    response = await litellm.acompletion(**kwargs)
+    async for chunk in response:
+        token = chunk["choices"][0]["delta"].get("content") or ""
+        if token:
+            yield token

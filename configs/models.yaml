@@ -6,8 +6,8 @@ agents:
   planner: local-qwen14b
   retriever: local-qwen14b
   neuro_entity: local-qwen14b
-  synthesizer: claude-sonnet   # quality where it matters; flip to local-qwen14b to run fully offline
-  critic: claude-sonnet
+  synthesizer: local-qwen14b
+  critic: local-qwen14b
 
 backends:
   local-qwen14b:
