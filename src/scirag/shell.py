@@ -88,7 +88,7 @@ def _banner() -> None:
 
     console.print()
     console.print(f"╭{sep}╮")
-    console.print(f"│  [bold cyan]scirag-agent[/]  [dim]neuroscience RAG · PubMed/PMC[/]")
+    console.print(f"│  [bold cyan]scirag-agent[/]  [dim]scientific RAG · PubMed/PMC[/]")
     console.print(f"│{sep}│")
     console.print(row("llm:",      f"[cyan]{llm_model}[/]  [dim]/model to change[/]"))
     console.print(row("embedding:", f"[dim]{emb}[/]"))
