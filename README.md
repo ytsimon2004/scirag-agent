@@ -11,14 +11,14 @@ models (Claude/OpenAI) — swappable per agent in `configs/models.yaml`.
 
 ## Install
 
-```bash
+```
 git clone <repo> && cd scireg
 uv sync
 ```
 
 ### Local models (Ollama)
 
-```bash
+```
 ollama serve
 ollama pull qwen2.5:14b-instruct-q4_K_M   # LLM (~9 GB)
 ollama pull bge-m3                         # embeddings (~1.2 GB)
@@ -26,10 +26,11 @@ ollama pull bge-m3                         # embeddings (~1.2 GB)
 
 ### API keys (optional — needed only for frontier backends)
 
-```ansi
-[1;32mscirag[0m [36m❯[0m [36m/env[0m set NCBI_API_KEY     <key>   [2m# raises PubMed rate limit to 10 req/s[0m
-[1;32mscirag[0m [36m❯[0m [36m/env[0m set ANTHROPIC_API_KEY <key>   [2m# for claude-sonnet / claude-opus[0m
-[1;32mscirag[0m [36m❯[0m [36m/env[0m set OPENAI_API_KEY     <key>   [2m# for gpt-4o[0m
+```
+scirag
+scirag ❯ /env set NCBI_API_KEY    <key>     # raises PubMed rate limit to 10 req/s
+scirag ❯ /env set ANTHROPIC_API_KEY <key>   # for claude-sonnet / claude-opus
+scirag ❯ /env set OPENAI_API_KEY  <key>     # for gpt-4o
 ```
 
 Keys are stored in `~/.scirag-agent/.env` — never in the repo.
@@ -38,120 +39,86 @@ Keys are stored in `~/.scirag-agent/.env` — never in the repo.
 
 ## Interactive shell
 
-```bash
+```
 scirag
 ```
 
-```ansi
+```
 ╭──────────────────────────────────────────────────────╮
-│  [1;36mscirag-agent[0m  [2mscientific RAG · PubMed/PMC[0m           │
+│  scirag-agent  scientific RAG · PubMed/PMC           │
 │──────────────────────────────────────────────────────│
-│  [2mllm:[0m          [36mollama/qwen2.5:14b-instruct-q4_K_M[0m   [2m/model to change[0m
-│  [2membedding:[0m    [2mbge-m3[0m
-│  [2mollama:[0m       [32mrunning[0m
-│  [2mproject:[0m      [2mnone (global)[0m
-│  [2mindex:[0m        [2m0 article(s)[0m
-│  [2mdirectory:[0m    [2m~/code/scireg[0m
+│  llm:          ollama/qwen2.5:14b-instruct-q4_K_M    │
+│  embedding:    bge-m3                                │
+│  ollama:       running                               │
+│  project:      none (global)                         │
+│  index:        0 article(s)                          │
+│  directory:    ~/code/scireg                         │
 ╰──────────────────────────────────────────────────────╯
 
-[1;32mscirag[0m [36m❯[0m
+scirag ❯
 ```
 
 ---
 
 ## Core workflow
 
-### 1 — Search PubMed
+### 1 — Search PubMed (no index needed)
 
-```ansi
-[1;32mscirag[0m [36m❯[0m /search "anterior posterior retrosplenial cortex" --retmax 5
+```
+scirag ❯ /search "anterior posterior retrosplenial cortex" --retmax 10
 ```
 
-```ansi
-[1;36m41881980[0m Anterior and posterior retrosplenial cortex... [2m(2026)[0m
-  [32mPMC✓[0m [32mDOI✓[0m [32mABS✓[0m  [2mNature communications[0m
-  [2mhttps://pubmed.ncbi.nlm.nih.gov/41881980/[0m
-
-[1;36m35029643[0m Grid cells and spatial coding in the RSC...   [2m(2022)[0m
-  [31mPMC✗[0m [32mDOI✓[0m [32mABS✓[0m  [2mNeuron[0m
-  [2mhttps://pubmed.ncbi.nlm.nih.gov/35029643/[0m
-
-[32m5 articles[0m  —  PMC: 1  |  DOI/Unpaywall: 4  |  abstract-only: 4
-```
-
-Badges: `PMC✓` full Results-section text · `DOI✓` Unpaywall free PDF · `ABS✓` abstract fallback
+Shows each result with availability badges:
+- `PMC✓` — full Results-section text retrievable
+- `DOI✓` — Unpaywall can find a free PDF
+- `ABS✓` — abstract available as fallback
 
 ### 2 — Index papers interactively
 
-```ansi
-[1;32mscirag[0m [36m❯[0m /index "retrosplenial cortex" --retmax 10 [36m--full-text[0m
+```
+scirag ❯ /index "anterior posterior retrosplenial cortex" --retmax 10 --full-text
 ```
 
-```ansi
- 1. [1;36m41881980[0m  Anterior and posterior retrosplenial cortex...  [2m(2026)[0m  [32mPMC✓[0m [32mDOI✓[0m
-     [2mhttps://pubmed.ncbi.nlm.nih.gov/41881980/[0m
- 2. [2m[yellow] [indexed] [0m[2m[strike]35029643  Grid cells and spatial coding[0m  [2m(2022)[0m  [32mDOI✓[0m
-     [2mhttps://pubmed.ncbi.nlm.nih.gov/35029643/[0m
-
-? Select articles to index  (space = toggle, a = all, i = invert, enter = confirm):
- » [32m●[0m 41881980  Anterior and posterior retrosplenial...  (2026)  [PMC✓, DOI✓]
-   [2m○ 35029643  Grid cells...  (2022)  [indexed, DOI✓][0m
-```
+Fetches articles, shows a numbered list with status and clickable URLs, then
+opens a checkbox prompt — select which papers to embed and store.
 
 `--full-text` enriches each selected article through:
 
 ```
 PMC full text (Results section only)
-  → Unpaywall PDF  (Results section only)
+  → Unpaywall PDF (Results section only)
     → abstract fallback
       → warning + URL for manual download
 ```
 
 Manual PDF import when automatic retrieval fails:
 
-```ansi
-[1;32mscirag[0m [36m❯[0m /import-pdf ~/Downloads/41881980.pdf
-[1;32mscirag[0m [36m❯[0m /import-dir ~/Downloads/papers/
+```
+scirag ❯ /import-pdf ~/Downloads/41881980.pdf
+scirag ❯ /import-dir ~/Downloads/papers/
 ```
 
 ### 3 — Retrieve (no LLM)
 
-```ansi
-[1;32mscirag[0m [36m❯[0m /retrieve "visuospatial coding retrosplenial"
+```
+scirag ❯ /retrieve "visuospatial coding retrosplenial"
 ```
 
-```ansi
-[1;36m41881980[0m Anterior and posterior retrosplenial cortex...  [2m(2026)[0m  [32mresults[0m
-  [2mhttps://pubmed.ncbi.nlm.nih.gov/41881980/[0m
-  [2mThe anterior RSC receives strong visual drive while the posterior RSC…[0m
-
-[32m6 chunks retrieved[0m
-```
+Shows matching chunks with PMID, title, year, `results`/`abstract` source
+badge, and a clickable PubMed URL.
 
 ### 4 — Ask with LLM (RAG)
 
-```ansi
-[1;32mscirag[0m [36m❯[0m /llm "What distinguishes anterior from posterior RSC?"
+```
+scirag ❯ /llm "What distinguishes anterior from posterior RSC?"
 ```
 
-```ansi
-─────────────────────────── Sources ───────────────────────────
-  [1;36m41881980[0m  Anterior and posterior retrosplenial cortex...  [2m(2026)[0m  [32mresults[0m
-  [2mThe anterior RSC projects to visual areas while the posterior RSC…[0m
-  [2mhttps://pubmed.ncbi.nlm.nih.gov/41881980/[0m
-─────────────────────────── Answer ────────────────────────────
-The anterior RSC is predominantly driven by visual input [41881980],
-whereas the posterior RSC is more strongly connected to spatial and
-navigational circuits [41881980].
+Shows retrieved sources first, then a cited answer. Remembers conversation
+history within the session — follow-up questions work naturally.
 
-[2m(conversation turn 1 — /llm --reset to clear)[0m
 ```
-
-Follow-up questions work within the same session:
-
-```ansi
-[1;32mscirag[0m [36m❯[0m /llm "Which cell types mediate this?"   [2m# uses prior context[0m
-[1;32mscirag[0m [36m❯[0m /llm --reset                            [2m# clear history[0m
+scirag ❯ /llm "Which cell types mediate this?"   # follow-up
+scirag ❯ /llm --reset                            # clear history
 ```
 
 ---
@@ -160,43 +127,42 @@ Follow-up questions work within the same session:
 
 Separate indexes per research topic, stored in `~/.scirag-agent/projects/`.
 
-```ansi
-[1;32mscirag[0m [36m❯[0m /create-project rsc "Retrosplenial cortex circuits"
-Created project [1;36mrsc[0m and switched to it.
-
-[1;32mscirag[36m[rsc][0m [36m❯[0m /create-project place-cells "Hippocampal navigation"
-Created project [1;36mplace-cells[0m and switched to it.
-
-[1;32mscirag[36m[place-cells][0m [36m❯[0m /project
-[1;36m● place-cells[0m  Hippocampal navigation          [2mcreated 2026-06-10[0m
-[2m○ rsc          Retrosplenial cortex circuits  created 2026-06-10[0m
-
-[1;32mscirag[36m[place-cells][0m [36m❯[0m /project rsc
-Switched to project [1;36mrsc[0m.
-
-[1;32mscirag[36m[rsc][0m [36m❯[0m /project --default
-[2mSwitched to default global index.[0m
 ```
+scirag ❯ /create-project rsc "Retrosplenial cortex circuits"
+scirag ❯ /create-project place-cells "Hippocampal navigation"
+
+scirag ❯ /project              # list all
+  ● rsc          Retrosplenial cortex circuits   created 2026-06-10
+  ○ place-cells  Hippocampal navigation          created 2026-06-10
+
+scirag ❯ /project place-cells  # switch
+scirag ❯ /project --default    # back to global index
+scirag ❯ /delete-project rsc   # asks for confirmation
+```
+
+Prompt shows the active project: `scirag[rsc] ❯`
 
 ---
 
 ## LLM backends
 
-```ansi
-[1;32mscirag[0m [36m❯[0m /model
+```
+scirag ❯ /model
 ```
 
-```ansi
-? Select LLM backend  (↑↓ to move, enter to confirm):
- » [1;36mlocal-qwen14b [0m   ollama/qwen2.5:14b-instruct-q4_K_M            ← active
-   local-llama8b    ollama/llama3.1:8b-instruct-q4_K_M
-   local-deepseek   ollama/deepseek-r1:14b
-   claude-sonnet    anthropic/claude-sonnet-4-6   [33m[ANTHROPIC_API_KEY][0m
-   claude-opus      anthropic/claude-opus-4-8     [33m[ANTHROPIC_API_KEY][0m
-   gpt              openai/gpt-4o                 [33m[OPENAI_API_KEY][0m
+```
+Key              Model                                Needs
+local-qwen14b    ollama/qwen2.5:14b-instruct-q4_K_M               ← active
+local-llama8b    ollama/llama3.1:8b-instruct-q4_K_M
+local-deepseek   ollama/deepseek-r1:14b
+claude-sonnet    anthropic/claude-sonnet-4-6          ANTHROPIC_API_KEY
+claude-opus      anthropic/claude-opus-4-8            ANTHROPIC_API_KEY
+gpt              openai/gpt-4o                        OPENAI_API_KEY
 ```
 
-Switch applies to all agents for the current session — `configs/models.yaml` is never modified.
+Arrow keys to select, or `scirag ❯ /model claude-sonnet` directly.
+Switch applies to all agents for the current session — `configs/models.yaml`
+is never modified.
 
 ---
 
@@ -244,13 +210,17 @@ configs/
 
 ---
 
-## Full-text retrieval
+## Full-text retrieval notes
 
-Only the **Results section** is indexed — not introduction, methods, or discussion.
+Only the **Results section** is indexed — not introduction, methods, or
+discussion. Coverage per source:
 
-| Source | Coverage | Notes |
+| Source | Coverage | Requires |
 |---|---|---|
 | PMC full text | ~40 % of PubMed | Open-access articles only |
-| Unpaywall PDF | +20–30 % | Requires DOI; legal free copy |
+| Unpaywall PDF | +20–30 % | DOI present; legal free copy exists |
 | Manual PDF import | anything | `/import-pdf` or `/import-dir` |
 | Abstract fallback | 100 % | Always available |
+
+For papers with no free full text, `scirag` warns and prints the PubMed URL
+for manual download.
