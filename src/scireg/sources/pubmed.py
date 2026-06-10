@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import os
 import time
+import warnings
 from dataclasses import dataclass, field
 from xml.etree import ElementTree as ET
 
 import httpx
 
 EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+UNPAYWALL = "https://api.unpaywall.org/v2"
 
 
 def _get(path: str, params: dict, *, timeout: float, retries: int = 3) -> httpx.Response:
@@ -40,14 +42,18 @@ class Article:
     year: str = ""
     authors: list[str] = field(default_factory=list)
     mesh_terms: list[str] = field(default_factory=list)
+    pmc_id: str = ""
+    doi: str = ""
+    full_text: str = ""
 
     @property
     def url(self) -> str:
         return f"https://pubmed.ncbi.nlm.nih.gov/{self.pmid}/"
 
     def to_text(self) -> str:
-        """Flatten to a single chunkable document."""
-        return f"{self.title}\n\n{self.abstract}"
+        """Flatten to a single chunkable document. Uses full text when available."""
+        body = self.full_text if self.full_text else self.abstract
+        return f"{self.title}\n\n{body}"
 
     def metadata(self) -> dict:
         return {
@@ -56,7 +62,9 @@ class Article:
             "journal": self.journal,
             "year": self.year,
             "url": self.url,
+            "doi": self.doi,
             "mesh": ", ".join(self.mesh_terms),
+            "text_source": "results" if self.full_text else "abstract",
         }
 
 
@@ -124,6 +132,12 @@ def _parse_article(art: ET.Element) -> Article:
     year = text(".//PubDate/Year") or text(".//PubDate/MedlineDate")[:4]
     journal = text(".//Journal/Title")
 
+    doi = ""
+    for aid in art.findall(".//ArticleIdList/ArticleId"):
+        if aid.get("IdType") == "doi" and aid.text:
+            doi = aid.text
+            break
+
     return Article(
         pmid=pmid,
         title=title,
@@ -132,8 +146,156 @@ def _parse_article(art: ET.Element) -> Article:
         year=year,
         authors=authors,
         mesh_terms=mesh,
+        doi=doi,
     )
 
 
 def search_and_fetch(query: str, retmax: int = 25) -> list[Article]:
     return fetch(search(query, retmax=retmax))
+
+
+# ---------------------------------------------------------------------------
+# PMC full-text (Results section only)
+# ---------------------------------------------------------------------------
+
+def _pmids_to_pmcids(pmids: list[str]) -> dict[str, str]:
+    """Map PubMed IDs to PMC IDs via elink. Returns only PMIDs that have a PMC entry."""
+    r = _get(
+        "elink.fcgi",
+        _params(dbfrom="pubmed", db="pmc", id=",".join(pmids), cmd="neighbor"),
+        timeout=30,
+    )
+    root = ET.fromstring(r.text)
+    mapping: dict[str, str] = {}
+    for linkset in root.findall(".//LinkSet"):
+        pmid_el = linkset.find(".//IdList/Id")
+        if pmid_el is None or not pmid_el.text:
+            continue
+        pmid = pmid_el.text
+        for link in linkset.findall(".//LinkSetDb/Link/Id"):
+            if link.text:
+                mapping[pmid] = link.text
+                break
+    return mapping
+
+
+def _extract_results_from_jats(root: ET.Element) -> str:
+    """Extract only the Results section paragraphs from a JATS XML tree."""
+    for sec in root.iter():
+        if sec.tag != "sec" and not sec.tag.endswith("}sec"):
+            continue
+        title_el = next(
+            (c for c in sec if c.tag == "title" or c.tag.endswith("}title")), None
+        )
+        if title_el is None:
+            continue
+        if "result" not in "".join(title_el.itertext()).lower():
+            continue
+        parts = [
+            "".join(el.itertext()).strip()
+            for el in sec.iter()
+            if (el.tag == "p" or el.tag.endswith("}p"))
+        ]
+        parts = [p for p in parts if p]
+        if parts:
+            return "\n\n".join(parts)
+    return ""
+
+
+def _fetch_pmc_fulltext(pmc_id: str) -> str:
+    """Fetch PMC JATS XML and return the Results section text. Returns '' on failure."""
+    try:
+        r = _get(
+            "efetch.fcgi",
+            {"db": "pmc", "id": pmc_id, "rettype": "xml", "retmode": "xml"},
+            timeout=60,
+        )
+        return _extract_results_from_jats(ET.fromstring(r.text))
+    except Exception:
+        return ""
+
+
+# ---------------------------------------------------------------------------
+# Unpaywall fallback
+# ---------------------------------------------------------------------------
+
+def _unpaywall_pdf_url(doi: str) -> str:
+    """Return the best open-access PDF URL for a DOI via Unpaywall, or ''."""
+    if not doi:
+        return ""
+    email = os.getenv("NCBI_EMAIL", "scireg@example.com")
+    try:
+        r = httpx.get(f"{UNPAYWALL}/{doi}", params={"email": email}, timeout=20)
+        r.raise_for_status()
+        loc = r.json().get("best_oa_location") or {}
+        return loc.get("url_for_pdf") or loc.get("url") or ""
+    except Exception:
+        return ""
+
+
+def _download_pdf_results(url: str) -> str:
+    """Download a PDF from url and return its Results section text."""
+    try:
+        import tempfile
+        from pathlib import Path
+
+        from scireg.sources.pdf import extract_results_section, extract_text_from_pdf
+
+        r = httpx.get(url, timeout=60, follow_redirects=True)
+        r.raise_for_status()
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
+            f.write(r.content)
+            tmp = Path(f.name)
+        text = extract_text_from_pdf(tmp)
+        tmp.unlink(missing_ok=True)
+        return extract_results_section(text)
+    except Exception:
+        return ""
+
+
+# ---------------------------------------------------------------------------
+# Public enrichment entry point
+# ---------------------------------------------------------------------------
+
+def enrich_with_fulltext(articles: list[Article]) -> None:
+    """Enrich articles with Results-section text via PMC then Unpaywall.
+
+    Mutates articles in place. Emits a warning for each article where no
+    full text could be retrieved — the caller should offer a manual PDF
+    import fallback in that case.
+    """
+    if not articles:
+        return
+
+    pmids = [a.pmid for a in articles if a.pmid]
+    pmc_map = _pmids_to_pmcids(pmids)
+    has_key = bool(os.getenv("NCBI_API_KEY"))
+    articles_by_pmid = {a.pmid: a for a in articles}
+
+    for pmid, pmc_id in pmc_map.items():
+        article = articles_by_pmid.get(pmid)
+        if article is None:
+            continue
+        article.pmc_id = pmc_id
+        article.full_text = _fetch_pmc_fulltext(pmc_id)
+        if not has_key:
+            time.sleep(0.34)
+
+    # Unpaywall fallback for articles still missing full text
+    for article in articles:
+        if article.full_text:
+            continue
+        pdf_url = _unpaywall_pdf_url(article.doi)
+        if pdf_url:
+            article.full_text = _download_pdf_results(pdf_url)
+
+    # Warn for anything still empty
+    missing = [a for a in articles if not a.full_text]
+    if missing:
+        pmids_str = ", ".join(a.pmid for a in missing)
+        warnings.warn(
+            f"{len(missing)} article(s) have no retrievable full text "
+            f"(PMIDs: {pmids_str}). "
+            "Use `scireg import-pdf` to add manually downloaded PDFs.",
+            stacklevel=2,
+        )

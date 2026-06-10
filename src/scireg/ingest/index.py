@@ -42,6 +42,22 @@ def build_index(articles: list[Article]) -> VectorStoreIndex:
     )
 
 
+def get_indexed_pmids() -> set[str]:
+    """Return the set of PMIDs already stored in the index. Empty set if index doesn't exist."""
+    import lancedb
+    cfg = pipeline_cfg()["index"]
+    try:
+        db = lancedb.connect(cfg["uri"])
+        tbl = db.open_table(cfg["table"])
+        arrow_tbl = tbl.to_lance().to_table(columns=["metadata"])
+        # metadata is a ChunkedArray of structs — combine before field access
+        metadata_col = arrow_tbl.column("metadata").combine_chunks()
+        pmids = metadata_col.field("pmid").to_pylist()
+        return {p for p in pmids if p}
+    except Exception:
+        return set()
+
+
 def load_index() -> VectorStoreIndex:
     """Open the existing LanceDB-backed index for querying."""
     return VectorStoreIndex.from_vector_store(
