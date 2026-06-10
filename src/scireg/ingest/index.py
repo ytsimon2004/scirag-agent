@@ -1,5 +1,8 @@
 """Indexing layer (LlamaIndex). Parses + chunks Articles, embeds with a local
 Ollama model, and persists to an embedded LanceDB store.
+
+All DB paths route through scireg.projects.get_active_db_uri() so that
+multiple research projects can each have their own isolated index.
 """
 from __future__ import annotations
 
@@ -18,8 +21,11 @@ def _embed_model() -> OllamaEmbedding:
 
 
 def _vector_store() -> LanceDBVectorStore:
-    idx = pipeline_cfg()["index"]
-    return LanceDBVectorStore(uri=idx["uri"], table_name=idx["table"])
+    from scireg.projects import get_active_db_uri
+    return LanceDBVectorStore(
+        uri=get_active_db_uri(),
+        table_name=pipeline_cfg()["index"]["table"],
+    )
 
 
 def build_index(articles: list[Article]) -> VectorStoreIndex:
@@ -43,14 +49,13 @@ def build_index(articles: list[Article]) -> VectorStoreIndex:
 
 
 def get_indexed_pmids() -> set[str]:
-    """Return the set of PMIDs already stored in the index. Empty set if index doesn't exist."""
+    """Return PMIDs in the active project's index. Empty set if index doesn't exist."""
     import lancedb
-    cfg = pipeline_cfg()["index"]
+    from scireg.projects import get_active_db_uri
     try:
-        db = lancedb.connect(cfg["uri"])
-        tbl = db.open_table(cfg["table"])
+        db = lancedb.connect(get_active_db_uri())
+        tbl = db.open_table(pipeline_cfg()["index"]["table"])
         arrow_tbl = tbl.to_lance().to_table(columns=["metadata"])
-        # metadata is a ChunkedArray of structs — combine before field access
         metadata_col = arrow_tbl.column("metadata").combine_chunks()
         pmids = metadata_col.field("pmid").to_pylist()
         return {p for p in pmids if p}
@@ -59,7 +64,7 @@ def get_indexed_pmids() -> set[str]:
 
 
 def load_index() -> VectorStoreIndex:
-    """Open the existing LanceDB-backed index for querying."""
+    """Open the active project's LanceDB index for querying."""
     return VectorStoreIndex.from_vector_store(
         _vector_store(), embed_model=_embed_model()
     )

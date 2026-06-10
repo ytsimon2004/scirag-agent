@@ -34,12 +34,16 @@ def retrieve(query: str) -> list[NodeWithScore]:
 
     # Sparse pass over the same docstore.
     try:
+        import warnings
         from llama_index.retrievers.bm25 import BM25Retriever
 
         bm25 = BM25Retriever.from_defaults(
             docstore=index.docstore, similarity_top_k=cfg["bm25_k"]
         )
-        sparse = bm25.retrieve(query)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=RuntimeWarning, module="bm25s")
+            warnings.filterwarnings("ignore", category=RuntimeWarning, module="numpy")
+            sparse = bm25.retrieve(query)
     except Exception:
         sparse = []  # BM25 optional; degrade to dense-only gracefully
 

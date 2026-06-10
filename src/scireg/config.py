@@ -32,8 +32,22 @@ def pipeline_cfg() -> dict[str, Any]:
     return _load_yaml(os.getenv("SCIREG_PIPELINE_CONFIG", "configs/pipeline.yaml"))
 
 
+_runtime_backend: dict[str, str] = {}  # agent -> backend key, overrides models.yaml
+
+
+def set_agent_backend(agent: str, backend_key: str) -> None:
+    """Override the backend for an agent for this session (does not modify models.yaml)."""
+    _runtime_backend[agent] = backend_key
+
+
 def backend_for(agent: str) -> dict[str, Any]:
     """Resolve an agent role (e.g. 'synthesizer') to its concrete backend dict."""
     cfg = models_cfg()
-    key = cfg["agents"][agent]
+    key = _runtime_backend.get(agent) or cfg["agents"][agent]
     return cfg["backends"][key]
+
+
+def active_backend_key(agent: str) -> str:
+    """Return the backend key currently in use for an agent."""
+    cfg = models_cfg()
+    return _runtime_backend.get(agent) or cfg["agents"][agent]

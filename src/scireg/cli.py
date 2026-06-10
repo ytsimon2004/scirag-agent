@@ -126,6 +126,10 @@ def do_index(query: str, retmax: int = 25, full_text: bool = False) -> None:
         return
 
     existing = get_indexed_pmids()
+    # Brief pause so the elink call doesn't immediately follow esearch+efetch
+    # and hit NCBI's 3 req/s limit (causing silent empty responses).
+    if not __import__("os").getenv("NCBI_API_KEY"):
+        __import__("time").sleep(0.4)
     pmc_map  = _pmids_to_pmcids([a.pmid for a in arts])
 
     console.print()
@@ -188,15 +192,125 @@ def do_retrieve(query: str) -> None:
     print_retrieve_results(_retrieve(query))
 
 
-def do_ask(query: str) -> None:
-    from scireg.graph.state import build_graph
-    graph = build_graph()
-    result = graph.invoke({"query": query})
-    ents = {k: v for k, v in result.get("entities", {}).items() if v}
-    if ents:
-        console.print(f"[dim]entities: {ents}[/]")
-    console.print(f"[dim]{len(result.get('nodes', []))} passages retrieved[/]\n")
-    console.print(Markdown(result.get("answer", "(no answer)")))
+_LLM_AGENTS = ("synthesizer", "critic", "neuro_entity", "planner", "retriever")
+
+
+def do_model(backend_key: str = "") -> None:
+    """List available backends or switch all LLM agents to a new backend."""
+    from rich.table import Table
+    from scireg.config import active_backend_key, models_cfg, set_agent_backend
+
+    cfg = models_cfg()
+    backends = cfg["backends"]
+    current = active_backend_key("synthesizer")
+
+    if not backend_key:
+        import questionary
+
+        def _label(key: str, spec: dict) -> str:
+            needs = ""
+            if "anthropic" in spec["model"]:
+                needs = "  [ANTHROPIC_API_KEY]"
+            elif "openai" in spec["model"]:
+                needs = "  [OPENAI_API_KEY]"
+            active = "  ← active" if key == current else ""
+            return f"{key:<20} {spec['model']}{needs}{active}"
+
+        choices = [
+            questionary.Choice(title=_label(k, v), value=k)
+            for k, v in backends.items()
+        ]
+        # Pre-select the currently active backend
+        default = next((c for c in choices if c.value == current), choices[0])
+
+        selected = questionary.select(
+            "Select LLM backend  (↑↓ to move, enter to confirm):",
+            choices=choices,
+            default=default,
+        ).ask()
+
+        if selected is None or selected == current:
+            console.print("[dim]Unchanged.[/]")
+            return
+        backend_key = selected
+
+    if backend_key not in backends:
+        console.print(f"[red]Unknown backend:[/] {backend_key!r}")
+        console.print(f"[dim]Available: {', '.join(backends)}[/]")
+        return
+
+    for agent in _LLM_AGENTS:
+        set_agent_backend(agent, backend_key)
+    spec = backends[backend_key]
+    console.print(f"Switched to [cyan]{backend_key}[/]  [dim]({spec['model']})[/]")
+
+
+# Conversation history for /llm — lives for the duration of the process.
+_llm_history: list[dict[str, str]] = []
+
+
+def do_llm(query: str, *, reset: bool = False) -> None:
+    """RAG-grounded answer with visible sources and multi-turn conversation memory."""
+    from rich.rule import Rule
+    from scireg.agents.synthesize import SYSTEM, _format_sources
+    from scireg.llm.router import complete
+    from scireg.neuro.entities import expand_query, extract_entities
+    from scireg.retrieval.retriever import retrieve
+
+    global _llm_history
+    if reset:
+        _llm_history = []
+        console.print("[dim]Conversation history cleared.[/]")
+        return
+
+    # --- Entity extraction + retrieval ---
+    ents = extract_entities(query)
+    expanded = expand_query(query, ents)
+    nonempty = {k: v for k, v in ents.items() if v}
+    if nonempty:
+        console.print(f"[dim]entities: {nonempty}[/]")
+
+    nodes = retrieve(expanded)
+    if not nodes:
+        console.print("[yellow]Nothing retrieved — run [/][cyan]/index <query>[/][yellow] first.[/]")
+        return
+
+    # --- Show sources ---
+    console.print(Rule("[dim]Sources[/]", style="dim"))
+    for n in nodes:
+        md = n.node.metadata
+        url  = md.get("url", "")
+        src  = md.get("text_source", "")
+        src_tag = "[green]results[/]" if src == "results" else "[dim]abstract[/]"
+        pmid_str = f"[link={url}]{md.get('pmid','?')}[/link]" if url else md.get("pmid", "?")
+        snippet = n.node.get_content()[:100].replace("\n", " ")
+        console.print(
+            f"  [bold cyan]{pmid_str}[/] {md.get('title','')[:60]}  "
+            f"[dim]({md.get('year','n.d.')})[/]  {src_tag}"
+        )
+        console.print(f"  [dim]{snippet}…[/]")
+        if url:
+            console.print(f"  [dim][link={url}]{url}[/link][/]")
+    console.print(Rule("[dim]Answer[/]", style="dim"))
+
+    # --- Build messages with history ---
+    sources_block = _format_sources(nodes)
+    user_content = (
+        f"Question: {query}\n\nSources:\n{sources_block}\n\n"
+        "Write a concise, cited answer."
+    )
+    messages = [{"role": "system", "content": SYSTEM}]
+    messages.extend(_llm_history)
+    messages.append({"role": "user", "content": user_content})
+
+    answer = complete("synthesizer", messages, max_tokens=1200)
+
+    # Persist turn in history (store the bare question, not the full sources block)
+    _llm_history.append({"role": "user", "content": f"Question: {query}"})
+    _llm_history.append({"role": "assistant", "content": answer})
+
+    console.print(Markdown(answer))
+    console.print(f"\n[dim](conversation turn {len(_llm_history) // 2} — /llm --reset to clear)[/]")
 
 
 def do_import_pdf(path: str) -> None:
@@ -248,6 +362,32 @@ def do_status() -> None:
         console.print("[yellow]Index is empty.[/] Run [cyan]/index <query>[/] to populate it.")
 
 
+def do_clear_db(force: bool = False) -> None:
+    import shutil
+    from scireg.projects import get_active_db_uri
+    uri = get_active_db_uri()
+    db_path = Path(uri) if Path(uri).is_absolute() else Path.cwd() / uri
+
+    if not db_path.exists():
+        console.print("[yellow]Index directory does not exist — nothing to clear.[/]")
+        return
+
+    from scireg.ingest.index import get_indexed_pmids
+    n = len(get_indexed_pmids())
+
+    if not force:
+        import questionary
+        confirmed = questionary.confirm(
+            f"Delete the entire index ({n} article(s) at {db_path})? This cannot be undone."
+        ).ask()
+        if not confirmed:
+            console.print("[dim]Cancelled.[/]")
+            return
+
+    shutil.rmtree(db_path)
+    console.print(f"[green]Index cleared.[/] ({db_path})")
+
+
 # ---------------------------------------------------------------------------
 # Typer subcommands (thin wrappers — all logic lives in do_* above)
 # ---------------------------------------------------------------------------
@@ -271,9 +411,12 @@ def retrieve(query: str):
 
 
 @app.command()
-def ask(query: str):
-    """Run the full multi-agent RAG pipeline and return a cited answer."""
-    do_ask(query)
+def llm(
+    query: str = typer.Argument("", help="Question to ask. Omit with --reset to clear history."),
+    reset: bool = typer.Option(False, "--reset", help="Clear conversation history."),
+):
+    """Ask a question grounded in the indexed papers, with conversation memory."""
+    do_llm(query, reset=reset)
 
 
 @app.command(name="import-pdf")
@@ -286,6 +429,45 @@ def import_pdf(path: str):
 def import_dir(path: str):
     """Index all PDFs in a directory (Results section only)."""
     do_import_dir(path)
+
+
+@app.command()
+def model(backend_key: str = typer.Argument("", help="Backend key to switch to. Omit to list.")):
+    """List available LLM backends or switch the active model."""
+    do_model(backend_key)
+
+
+@app.command(name="clear-db")
+def clear_db(force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt.")):
+    """Delete the entire local index (irreversible)."""
+    do_clear_db(force=force)
+
+
+@app.command(name="delete-project")
+def delete_project_cmd(
+    name: str,
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt."),
+):
+    """Delete a project and its entire index (irreversible)."""
+    import questionary
+    from scireg.projects import delete_project, get_active_project, list_projects
+
+    if not any(p["name"] == name for p in list_projects()):
+        console.print(f"[red]Project {name!r} not found.[/]")
+        raise typer.Exit(1)
+    if not force:
+        confirmed = questionary.confirm(
+            f"Delete project '{name}' and all its indexed articles? This cannot be undone."
+        ).ask()
+        if not confirmed:
+            console.print("[dim]Cancelled.[/]")
+            return
+    delete_project(name)
+    console.print(f"[green]Project [cyan]{name}[/] deleted.[/]")
+    if get_active_project() != name:
+        pass
+    else:
+        console.print("[dim]Switched to default global index.[/]")
 
 
 if __name__ == "__main__":

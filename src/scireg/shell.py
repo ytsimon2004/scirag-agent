@@ -14,22 +14,35 @@ from rich.table import Table
 console = Console()
 
 _COMMANDS: dict[str, str] = {
-    "/search":     "<query> [--retmax N]              — search PubMed, show full-text availability",
-    "/index":      "<query> [--retmax N] [--full-text] — interactive fetch + select + index",
-    "/retrieve":   "<query>                            — query local index (no LLM)",
-    "/ask":        "<query>                            — full RAG pipeline with cited answer",
-    "/import-pdf": "<path>                             — index a single PDF (Results section only)",
-    "/import-dir": "<path>                             — index all PDFs in a directory",
-    "/status":     "                                   — show index statistics",
-    "/help":       "                                   — show this help",
-    "/clear":      "                                   — clear the screen",
-    "/exit":       "                                   — exit scireg",
+    "/search":         "<query> [--retmax N]               — search PubMed, show full-text availability",
+    "/index":          "<query> [--retmax N] [--full-text]  — interactive fetch + select + index",
+    "/retrieve":       "<query>                             — query local index (no LLM)",
+    "/llm":            "<question> [--reset]               — RAG answer with sources + conversation memory",
+    "/model":          "[backend-key]                       — list or switch LLM backend",
+    "/import-pdf":     "<path>                              — index a single PDF (Results section only)",
+    "/import-dir":     "<path>                              — index all PDFs in a directory",
+    "/status":         "                                    — show index statistics",
+    "/clear-db":       "[--force]                           — delete the active index",
+    "/create-project": "<name> [description]               — create a new project and switch to it",
+    "/project":        "[name|--default]                   — list projects or switch to one",
+    "/delete-project": "<name> [--force]                   — delete a project and its index",
+    "/help":           "                                    — show this help",
+    "/clear":          "                                    — clear the screen",
+    "/exit":           "                                    — exit scireg",
 }
 
 _COMPLETER = WordCompleter(list(_COMMANDS), sentence=True)
 
 
 def _prompt() -> HTML:
+    from scireg.projects import get_active_project
+    project = get_active_project()
+    if project:
+        return HTML(
+            f"<ansigreen><b>scireg</b></ansigreen>"
+            f"<ansiwhite>[</ansiwhite><ansiyellow>{project}</ansiyellow><ansiwhite>]</ansiwhite>"
+            f" <ansicyan>❯</ansicyan> "
+        )
     return HTML("<ansigreen><b>scireg</b></ansigreen> <ansicyan>❯</ansicyan> ")
 
 
@@ -38,14 +51,17 @@ def _banner() -> None:
     console.print("[bold green]scireg[/] [dim]— multi-agent RAG for scientific literature[/]")
     console.print("[dim]Type [/][cyan]/help[/][dim] for commands, [/][cyan]/exit[/][dim] to quit.[/]")
     console.print()
-    # Show quick index status inline
+    # Show active project + index status
     try:
         from scireg.ingest.index import get_indexed_pmids
+        from scireg.projects import get_active_project
+        project = get_active_project()
         pmids = get_indexed_pmids()
+        label = f"project [cyan]{project}[/]" if project else "global index"
         if pmids:
-            console.print(f"[dim]Index ready — {len(pmids)} article(s) stored.[/]\n")
+            console.print(f"[dim]{label} — {len(pmids)} article(s) stored.[/]\n")
         else:
-            console.print("[dim]Index empty — run [/][cyan]/index <query>[/][dim] to populate.[/]\n")
+            console.print(f"[dim]{label} is empty — run [/][cyan]/index <query>[/][dim] to populate.[/]\n")
     except Exception:
         pass
 
@@ -60,17 +76,21 @@ def _handle_help() -> None:
 
 
 def _parse_flags(args: list[str]) -> tuple[list[str], dict]:
-    """Split positional args from --flag / --flag N pairs."""
+    """Split positional args from --flag, --flag N, and --flag=N forms."""
     positional, flags = [], {}
     i = 0
     while i < len(args):
         if args[i].startswith("--"):
-            key = args[i][2:]
-            if i + 1 < len(args) and not args[i + 1].startswith("--"):
-                flags[key] = args[i + 1]
+            token = args[i][2:]
+            if "=" in token:                              # --key=value
+                key, val = token.split("=", 1)
+                flags[key] = val
+                i += 1
+            elif i + 1 < len(args) and not args[i + 1].startswith("--"):
+                flags[token] = args[i + 1]               # --key value
                 i += 2
             else:
-                flags[key] = True
+                flags[token] = True                      # --flag (boolean)
                 i += 1
         else:
             positional.append(args[i])
@@ -89,6 +109,8 @@ def _dispatch(line: str) -> None:
         return
 
     cmd, args = parts[0].lower(), parts[1:]
+    positional, flags = _parse_flags(args)
+    query = " ".join(positional)
 
     if cmd in ("/exit", "/quit"):
         raise SystemExit(0)
@@ -106,8 +128,91 @@ def _dispatch(line: str) -> None:
         do_status()
         return
 
-    positional, flags = _parse_flags(args)
-    query = " ".join(positional)
+    if cmd == "/clear-db":
+        from scireg.cli import do_clear_db
+        do_clear_db(force="force" in flags)
+        return
+
+    if cmd == "/delete-project":
+        if not positional:
+            console.print("[yellow]Usage:[/] /delete-project <name> [--force]")
+            return
+        name = positional[0]
+        from scireg.projects import delete_project, get_active_project, list_projects
+        if not any(p["name"] == name for p in list_projects()):
+            console.print(f"[red]Project {name!r} not found.[/]")
+            return
+        if not flags.get("force"):
+            import questionary
+            confirmed = questionary.confirm(
+                f"Delete project '{name}' and all its indexed articles? This cannot be undone."
+            ).ask()
+            if not confirmed:
+                console.print("[dim]Cancelled.[/]")
+                return
+        delete_project(name)
+        active = get_active_project()
+        console.print(f"[green]Project [cyan]{name}[/] deleted.[/]")
+        if active != name:
+            pass  # still on a different project
+        else:
+            console.print("[dim]Switched to default global index.[/]")
+        return
+
+    if cmd == "/create-project":
+        if not positional:
+            console.print("[yellow]Usage:[/] /create-project <name> [description]")
+            return
+        name = positional[0]
+        desc = " ".join(positional[1:])
+        from scireg.projects import create_project, set_active_project
+        try:
+            create_project(name, desc)
+            set_active_project(name)
+            console.print(f"Created project [cyan]{name}[/] and switched to it.")
+        except ValueError as e:
+            console.print(f"[red]Error:[/] {e}")
+        return
+
+    if cmd == "/project":
+        from scireg.projects import (
+            create_project, delete_project, get_active_project,
+            list_projects, set_active_project,
+        )
+        if not positional and "default" not in flags:
+            # List all projects
+            projects = list_projects()
+            active = get_active_project()
+            if not projects:
+                console.print(
+                    "[yellow]No projects yet.[/] "
+                    "Use [cyan]/create-project <name>[/] to create one."
+                )
+            else:
+                for p in projects:
+                    is_active = p["name"] == active
+                    marker = "●" if is_active else "○"
+                    style = "bold cyan" if is_active else "dim"
+                    desc = f"  [dim]{p['description']}[/]" if p.get("description") else ""
+                    created = f"  [dim]created {p['created']}[/]"
+                    console.print(f"[{style}]{marker} {p['name']}[/]{desc}{created}")
+                if not active:
+                    console.print("[dim](using default global index)[/]")
+        elif "default" in flags:
+            set_active_project(None)
+            console.print("[dim]Switched to default global index.[/]")
+        else:
+            name = positional[0]
+            projects = list_projects()
+            if not any(p["name"] == name for p in projects):
+                console.print(
+                    f"[red]Project {name!r} not found.[/]  "
+                    f"Use [cyan]/create-project {name}[/] to create it."
+                )
+                return
+            set_active_project(name)
+            console.print(f"Switched to project [cyan]{name}[/].")
+        return
 
     if cmd == "/search":
         if not query:
@@ -134,12 +239,19 @@ def _dispatch(line: str) -> None:
         from scireg.cli import do_retrieve
         do_retrieve(query)
 
-    elif cmd == "/ask":
-        if not query:
-            console.print("[yellow]Usage:[/] /ask <query>")
-            return
-        from scireg.cli import do_ask
-        do_ask(query)
+    elif cmd == "/llm":
+        if flags.get("reset"):
+            from scireg.cli import do_llm
+            do_llm("", reset=True)
+        elif not query:
+            console.print("[yellow]Usage:[/] /llm <question>  [dim](or /llm --reset to clear history)[/]")
+        else:
+            from scireg.cli import do_llm
+            do_llm(query)
+
+    elif cmd == "/model":
+        from scireg.cli import do_model
+        do_model(query)
 
     elif cmd == "/import-pdf":
         if not query:
