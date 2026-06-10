@@ -47,21 +47,15 @@ def _prompt() -> HTML:
     return HTML("<ansigreen><b>scirag</b></ansigreen> <ansicyan>❯</ansicyan> ")
 
 
-_LOGO = """\
- ______     ______     __     ______     ______     ______
-/\\  ___\\   /\\  ___\\   /\\ \\   /\\  == \\   /\\  __ \\   /\\  ___\\
-\\ \\___  \\  \\ \\ \\____  \\ \\ \\  \\ \\  __<   \\ \\  __ \\  \\ \\ \\__ \\
- \\/\\_____\\  \\ \\_____\\  \\ \\_\\  \\ \\_\\ \\_\\  \\ \\_\\ \\_\\  \\ \\_____\\
-  \\/_____/   \\/_____/   \\/_/   \\/_/ /_/   \\/_/\\/_/   \\/_____/
-"""
-
 _TAGLINE = "agent  ·  neuroscience RAG  ·  PubMed / PMC"
 
 
 def _banner() -> None:
+    import pyfiglet
     from rich.markup import escape
+    logo = pyfiglet.figlet_format("scirag", font="epic")
     console.print()
-    for line in _LOGO.splitlines():
+    for line in logo.splitlines():
         console.print(f"[bold green]{escape(line)}[/]")
     console.print(f"[dim]  {_TAGLINE}[/]")
     console.print("[dim]  /help for commands  ·  /exit to quit[/]")
