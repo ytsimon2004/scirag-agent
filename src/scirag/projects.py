@@ -6,6 +6,7 @@ All data lives under ~/.scirag-agent/:
   projects.json             — project registry
   .active_project           — name of the active project (plain text)
 """
+
 from __future__ import annotations
 
 import json
@@ -29,6 +30,7 @@ def _active_path() -> Path:
 # ---------------------------------------------------------------------------
 # Read
 # ---------------------------------------------------------------------------
+
 
 def list_projects() -> list[dict]:
     p = _registry_path()
@@ -54,6 +56,7 @@ def get_active_db_uri() -> str:
 # ---------------------------------------------------------------------------
 # Write
 # ---------------------------------------------------------------------------
+
 
 def set_active_project(name: Optional[str]) -> None:
     p = _active_path()
@@ -83,6 +86,7 @@ def create_project(name: str, description: str = "") -> dict:
 
 def delete_project(name: str) -> None:
     import shutil
+
     projects = list_projects()
     if not any(p["name"] == name for p in projects):
         raise ValueError(f"Project {name!r} not found")
@@ -91,8 +95,6 @@ def delete_project(name: str) -> None:
     if db_path.exists():
         shutil.rmtree(db_path)
 
-    _registry_path().write_text(
-        json.dumps([p for p in projects if p["name"] != name], indent=2)
-    )
+    _registry_path().write_text(json.dumps([p for p in projects if p["name"] != name], indent=2))
     if get_active_project() == name:
         set_active_project(None)

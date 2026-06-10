@@ -3,6 +3,7 @@
 Launch via the shell:  scirag ❯ /llm-ui
 Or directly:           uv run --extra ui chainlit run src/scirag/ui.py
 """
+
 from __future__ import annotations
 
 import chainlit as cl
@@ -35,9 +36,9 @@ def _status_text() -> str:
         index_str = f"{n} article(s)"
     except Exception:
         index_str = "empty"
-    llm_key   = active_backend_key("synthesizer")
+    llm_key = active_backend_key("synthesizer")
     llm_model = models_cfg()["backends"][llm_key]["model"]
-    emb       = models_cfg()["embeddings"]["model"]
+    emb = models_cfg()["embeddings"]["model"]
     return (
         f"**scirag-agent** · scientific RAG · PubMed/PMC\n\n"
         f"| | |\n|---|---|\n"
@@ -55,16 +56,18 @@ async def on_start() -> None:
     cl.user_session.set("history", [])
 
     backends = list(models_cfg()["backends"].keys())
-    current  = active_backend_key("synthesizer")
+    current = active_backend_key("synthesizer")
 
-    await cl.ChatSettings([
-        Select(
-            id="backend",
-            label="LLM backend",
-            values=backends,
-            initial_value=current,
-        )
-    ]).send()
+    await cl.ChatSettings(
+        [
+            Select(
+                id="backend",
+                label="LLM backend",
+                values=backends,
+                initial_value=current,
+            )
+        ]
+    ).send()
 
     await cl.Message(content=_status_text()).send()
 
@@ -94,7 +97,7 @@ async def on_message(message: cl.Message) -> None:
 
     # --- Retrieve (always attempt; empty index is fine) ---
     async with cl.Step(name="Searching index", type="retrieval") as step:
-        ents     = extract_entities(query)
+        ents = extract_entities(query)
         expanded = expand_query(query, ents)
         nonempty = {k: v for k, v in ents.items() if v}
         if nonempty:
@@ -107,19 +110,18 @@ async def on_message(message: cl.Message) -> None:
     retrieve_lines: list[str] = []
 
     for n in nodes:
-        md      = n.node.metadata
-        pmid    = md.get("pmid", "?")
-        title   = md.get("title", "")
-        year    = md.get("year", "")
-        url     = md.get("url", "")
-        src     = md.get("text_source", "abstract")
+        md = n.node.metadata
+        pmid = md.get("pmid", "?")
+        title = md.get("title", "")
+        year = md.get("year", "")
+        url = md.get("url", "")
+        src = md.get("text_source", "abstract")
         snippet = n.node.get_content()[:200].replace("\n", " ")
 
         # Inline retrieve display (one entry per paper)
         if pmid not in seen:
             retrieve_lines.append(
-                f"**[{pmid}]** [{title[:65]}]({url}) *({year})* · `{src}`  \n"
-                f"> {snippet}…"
+                f"**[{pmid}]** [{title[:65]}]({url}) *({year})* · `{src}`  \n> {snippet}…"
             )
 
         seen.add(pmid)
@@ -146,9 +148,9 @@ async def on_message(message: cl.Message) -> None:
     # --- Build messages: include sources only when retrieval found something ---
     if nodes:
         sources_block = _format_sources(nodes)
-        user_content  = f"Question: {query}\n\nSources:\n{sources_block}\n\nAnswer concisely, citing [PMID] markers where relevant."
+        user_content = f"Question: {query}\n\nSources:\n{sources_block}\n\nAnswer concisely, citing [PMID] markers where relevant."
     else:
-        user_content  = query
+        user_content = query
 
     messages = [{"role": "system", "content": _SYSTEM}]
     messages.extend(history)
@@ -164,6 +166,6 @@ async def on_message(message: cl.Message) -> None:
         await answer_msg.stream_token(token)
     await answer_msg.update()
 
-    history.append({"role": "user",      "content": query})
+    history.append({"role": "user", "content": query})
     history.append({"role": "assistant", "content": answer})
     cl.user_session.set("history", history)

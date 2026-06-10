@@ -3,6 +3,7 @@
 Used by manual import commands (`scirag import-pdf / import-dir`) and
 by the Unpaywall fallback in sources/pubmed.py.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -32,9 +33,7 @@ _END_SECTION_RE = re.compile(
 def extract_text_from_pdf(path: Path) -> str:
     """Extract all text from a PDF, page by page."""
     reader = pypdf.PdfReader(str(path))
-    return "\n".join(
-        page.extract_text() or "" for page in reader.pages
-    )
+    return "\n".join(page.extract_text() or "" for page in reader.pages)
 
 
 def extract_results_section(text: str) -> str:

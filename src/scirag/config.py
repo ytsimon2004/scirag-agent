@@ -1,4 +1,5 @@
 """Central config: loads YAML model/pipeline configs and env vars."""
+
 from __future__ import annotations
 
 import os
@@ -10,8 +11,8 @@ import yaml
 from dotenv import load_dotenv
 
 _HOME_ENV = Path.home() / ".scirag-agent" / ".env"
-load_dotenv(_HOME_ENV)          # primary user config
-load_dotenv(override=True)      # local .env overrides (dev use)
+load_dotenv(_HOME_ENV)  # primary user config
+load_dotenv(override=True)  # local .env overrides (dev use)
 
 ROOT = Path(__file__).resolve().parents[2]
 

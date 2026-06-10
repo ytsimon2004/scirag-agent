@@ -1,13 +1,14 @@
 """scirag CLI — subcommands for scripting, or just `scirag` for the interactive shell.
 
-    scirag                                        # interactive shell (default)
-    scirag search "grid cells entorhinal"         # raw PubMed, no LLM
-    scirag index  "hippocampal place cells" --retmax 30 --full-text
-    scirag retrieve "place cells remapping"
-    scirag ask    "How do place cells remap across environments?"
-    scirag import-pdf paper.pdf
-    scirag import-dir ./papers/
+scirag                                        # interactive shell (default)
+scirag search "grid cells entorhinal"         # raw PubMed, no LLM
+scirag index  "hippocampal place cells" --retmax 30 --full-text
+scirag retrieve "place cells remapping"
+scirag ask    "How do place cells remap across environments?"
+scirag import-pdf paper.pdf
+scirag import-dir ./papers/
 """
+
 from __future__ import annotations
 
 import warnings
@@ -31,16 +32,19 @@ console = Console()
 # Typer entry point: no subcommand → shell
 # ---------------------------------------------------------------------------
 
+
 @app.callback()
 def _main(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is None:
         from scirag.shell import run_shell
+
         run_shell()
 
 
 # ---------------------------------------------------------------------------
 # Shared display helpers (used by both CLI commands and the shell)
 # ---------------------------------------------------------------------------
+
 
 def print_article_list(arts, existing: set, pmc_map: dict) -> None:
     for i, a in enumerate(arts, 1):
@@ -77,7 +81,9 @@ def print_retrieve_results(nodes) -> None:
         pmid_display = f"[link={url}]{md.get('pmid', '?')}[/link]" if url else md.get("pmid", "?")
         src = md.get("text_source", "")
         src_tag = "[green]results[/]" if src == "results" else "[dim]abstract[/]"
-        console.print(f"[bold cyan]{pmid_display}[/] {md.get('title', '')} [dim]({md.get('year', 'n.d.')})[/]  {src_tag}")
+        console.print(
+            f"[bold cyan]{pmid_display}[/] {md.get('title', '')} [dim]({md.get('year', 'n.d.')})[/]  {src_tag}"
+        )
         if url:
             console.print(f"  [dim][link={url}]{url}[/link][/]")
         console.print(f"  [dim]{snippet}…[/]\n")
@@ -87,6 +93,7 @@ def print_retrieve_results(nodes) -> None:
 # ---------------------------------------------------------------------------
 # Core logic (called by both CLI commands and the shell)
 # ---------------------------------------------------------------------------
+
 
 def do_search(query: str, retmax: int = 15) -> None:
     from scirag.sources.pubmed import _pmids_to_pmcids
@@ -99,9 +106,9 @@ def do_search(query: str, retmax: int = 15) -> None:
     pmc_map = _pmids_to_pmcids([a.pmid for a in arts])
     console.print()
     for a in arts:
-        pmc_tag  = "[green]PMC✓[/]" if a.pmid in pmc_map else "[dim]PMC✗[/]"
-        doi_tag  = "[green]DOI✓[/]" if a.doi              else "[dim]DOI✗[/]"
-        abst_tag = "[green]ABS✓[/]" if a.abstract         else "[red]ABS✗[/]"
+        pmc_tag = "[green]PMC✓[/]" if a.pmid in pmc_map else "[dim]PMC✗[/]"
+        doi_tag = "[green]DOI✓[/]" if a.doi else "[dim]DOI✗[/]"
+        abst_tag = "[green]ABS✓[/]" if a.abstract else "[red]ABS✗[/]"
         console.print(
             f"[bold cyan][link={a.url}]{a.pmid}[/link][/] {a.title[:70]} [dim]({a.year})[/]\n"
             f"  {pmc_tag} {doi_tag} {abst_tag}  [dim]{a.journal}[/]\n"
@@ -130,7 +137,7 @@ def do_index(query: str, retmax: int = 25, full_text: bool = False) -> None:
     # and hit NCBI's 3 req/s limit (causing silent empty responses).
     if not __import__("os").getenv("NCBI_API_KEY"):
         __import__("time").sleep(0.4)
-    pmc_map  = _pmids_to_pmcids([a.pmid for a in arts])
+    pmc_map = _pmids_to_pmcids([a.pmid for a in arts])
 
     console.print()
     print_article_list(arts, existing, pmc_map)
@@ -139,9 +146,12 @@ def do_index(query: str, retmax: int = 25, full_text: bool = False) -> None:
     choices = [
         questionary.Choice(
             title=f"{'[indexed] ' if a.pmid in existing else ''}"
-                  f"{a.pmid}  {a.title[:60]}  ({a.year})"
-                  + (f"  [{', '.join(t for t in (['PMC✓'] if a.pmid in pmc_map else []) + (['DOI✓'] if a.doi else []))}]"
-                     if a.pmid in pmc_map or a.doi else ""),
+            f"{a.pmid}  {a.title[:60]}  ({a.year})"
+            + (
+                f"  [{', '.join(t for t in (['PMC✓'] if a.pmid in pmc_map else []) + (['DOI✓'] if a.doi else []))}]"
+                if a.pmid in pmc_map or a.doi
+                else ""
+            ),
             value=a,
             checked=(a.pmid not in existing),
         )
@@ -161,6 +171,7 @@ def do_index(query: str, retmax: int = 25, full_text: bool = False) -> None:
 
     if full_text:
         from scirag.sources.pubmed import enrich_with_fulltext
+
         console.print("Fetching full text (Results section)...")
         with warnings.catch_warnings(record=True):
             warnings.simplefilter("always")
@@ -169,13 +180,15 @@ def do_index(query: str, retmax: int = 25, full_text: bool = False) -> None:
         console.print(f"Full text retrieved for [cyan]{n}[/] / {len(selected)} articles.")
         missing = [a for a in selected if not a.full_text]
         if missing:
-            console.print(f"\n[yellow]{len(missing)} article(s) without full text — download manually:[/]")
+            console.print(
+                f"\n[yellow]{len(missing)} article(s) without full text — download manually:[/]"
+            )
             for a in missing:
                 console.print(f"  [link={a.url}]{a.url}[/link]")
             console.print()
 
     new_arts = [a for a in selected if a.pmid not in existing]
-    already  = len(selected) - len(new_arts)
+    already = len(selected) - len(new_arts)
     if already:
         console.print(f"[dim]Skipping {already} already-indexed article(s).[/]")
     if not new_arts:
@@ -189,6 +202,7 @@ def do_index(query: str, retmax: int = 25, full_text: bool = False) -> None:
 
 def do_retrieve(query: str) -> None:
     from scirag.retrieval.retriever import retrieve as _retrieve
+
     print_retrieve_results(_retrieve(query))
 
 
@@ -215,10 +229,7 @@ def do_model(backend_key: str = "") -> None:
             active = "  ← active" if key == current else ""
             return f"{key:<20} {spec['model']}{needs}{active}"
 
-        choices = [
-            questionary.Choice(title=_label(k, v), value=k)
-            for k, v in backends.items()
-        ]
+        choices = [questionary.Choice(title=_label(k, v), value=k) for k, v in backends.items()]
         # Pre-select the currently active backend
         default = next((c for c in choices if c.value == current), choices[0])
 
@@ -271,21 +282,23 @@ def do_llm(query: str, *, reset: bool = False) -> None:
 
     nodes = retrieve(expanded)
     if not nodes:
-        console.print("[yellow]Nothing retrieved — run [/][cyan]/index <query>[/][yellow] first.[/]")
+        console.print(
+            "[yellow]Nothing retrieved — run [/][cyan]/index <query>[/][yellow] first.[/]"
+        )
         return
 
     # --- Show sources ---
     console.print(Rule("[dim]Sources[/]", style="dim"))
     for n in nodes:
         md = n.node.metadata
-        url  = md.get("url", "")
-        src  = md.get("text_source", "")
+        url = md.get("url", "")
+        src = md.get("text_source", "")
         src_tag = "[green]results[/]" if src == "results" else "[dim]abstract[/]"
-        pmid_str = f"[link={url}]{md.get('pmid','?')}[/link]" if url else md.get("pmid", "?")
+        pmid_str = f"[link={url}]{md.get('pmid', '?')}[/link]" if url else md.get("pmid", "?")
         snippet = n.node.get_content()[:100].replace("\n", " ")
         console.print(
-            f"  [bold cyan]{pmid_str}[/] {md.get('title','')[:60]}  "
-            f"[dim]({md.get('year','n.d.')})[/]  {src_tag}"
+            f"  [bold cyan]{pmid_str}[/] {md.get('title', '')[:60]}  "
+            f"[dim]({md.get('year', 'n.d.')})[/]  {src_tag}"
         )
         console.print(f"  [dim]{snippet}…[/]")
         if url:
@@ -295,8 +308,7 @@ def do_llm(query: str, *, reset: bool = False) -> None:
     # --- Build messages with history ---
     sources_block = _format_sources(nodes)
     user_content = (
-        f"Question: {query}\n\nSources:\n{sources_block}\n\n"
-        "Write a concise, cited answer."
+        f"Question: {query}\n\nSources:\n{sources_block}\n\nWrite a concise, cited answer."
     )
     messages = [{"role": "system", "content": SYSTEM}]
     messages.extend(_llm_history)
@@ -353,10 +365,10 @@ def do_import_dir(path: str) -> None:
 
 
 _ENV_KEYS = {
-    "NCBI_API_KEY":       "NCBI API key — raises rate limit from 3 to 10 req/s",
-    "NCBI_EMAIL":         "Email sent with NCBI requests (politeness header)",
-    "ANTHROPIC_API_KEY":  "Required for claude-sonnet / claude-opus backends",
-    "OPENAI_API_KEY":     "Required for gpt backend",
+    "NCBI_API_KEY": "NCBI API key — raises rate limit from 3 to 10 req/s",
+    "NCBI_EMAIL": "Email sent with NCBI requests (politeness header)",
+    "ANTHROPIC_API_KEY": "Required for claude-sonnet / claude-opus backends",
+    "OPENAI_API_KEY": "Required for gpt backend",
 }
 
 _HOME_ENV = Path.home() / ".scirag-agent" / ".env"
@@ -394,20 +406,20 @@ def do_env(action: str = "", key: str = "", value: str = "") -> None:
 
     if not action:
         table = Table(box=None, padding=(0, 2), show_header=True, header_style="bold")
-        table.add_column("Key",         style="cyan",  no_wrap=True)
-        table.add_column("Status",      no_wrap=True)
-        table.add_column("Value",       style="dim",   no_wrap=True)
+        table.add_column("Key", style="cyan", no_wrap=True)
+        table.add_column("Status", no_wrap=True)
+        table.add_column("Value", style="dim", no_wrap=True)
         table.add_column("Description", style="dim")
         for k, desc in _ENV_KEYS.items():
-            live    = os.getenv(k, "")
-            stored  = home_env.get(k, "")
+            live = os.getenv(k, "")
+            stored = home_env.get(k, "")
             if live:
-                status  = "[green]set[/]"
+                status = "[green]set[/]"
                 display = _mask(live)
                 if not stored:
                     display += "  [dim](local .env only)[/]"
             else:
-                status  = "[red]missing[/]"
+                status = "[red]missing[/]"
                 display = ""
             table.add_row(k, status, display, desc)
         console.print(table)
@@ -421,6 +433,7 @@ def do_env(action: str = "", key: str = "", value: str = "") -> None:
             return
         if key not in _ENV_KEYS:
             import questionary
+
             if not questionary.confirm(f"{key!r} is not a known key. Save anyway?").ask():
                 return
         home_env[key] = value
@@ -453,9 +466,7 @@ def do_llm_ui(port: int = 8000) -> None:
     try:
         import chainlit  # noqa: F401
     except ImportError:
-        console.print(
-            "[red]chainlit not installed.[/] Run: [cyan]uv sync --extra ui[/]"
-        )
+        console.print("[red]chainlit not installed.[/] Run: [cyan]uv sync --extra ui[/]")
         return
 
     ui_path = Path(__file__).parent / "ui.py"
@@ -463,14 +474,25 @@ def do_llm_ui(port: int = 8000) -> None:
     console.print(f"Starting web UI at [link={url}]{url}[/link] …")
 
     proc = subprocess.Popen(
-        ["uv", "run", "--extra", "ui", "chainlit", "run", str(ui_path),
-         "--port", str(port), "--headless"],
+        [
+            "uv",
+            "run",
+            "--extra",
+            "ui",
+            "chainlit",
+            "run",
+            str(ui_path),
+            "--port",
+            str(port),
+            "--headless",
+        ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
 
     # Poll until the server is up (max 10 s)
     import httpx
+
     for _ in range(20):
         time.sleep(0.5)
         try:
@@ -490,6 +512,7 @@ def do_llm_ui(port: int = 8000) -> None:
 
 def do_status() -> None:
     from scirag.ingest.index import get_indexed_pmids
+
     pmids = get_indexed_pmids()
     if pmids:
         console.print(f"Index: [cyan]{len(pmids)}[/] unique article(s) stored.")
@@ -500,6 +523,7 @@ def do_status() -> None:
 def do_clear_db(force: bool = False) -> None:
     import shutil
     from scirag.projects import get_active_db_uri
+
     uri = get_active_db_uri()
     db_path = Path(uri) if Path(uri).is_absolute() else Path.cwd() / uri
 
@@ -508,10 +532,12 @@ def do_clear_db(force: bool = False) -> None:
         return
 
     from scirag.ingest.index import get_indexed_pmids
+
     n = len(get_indexed_pmids())
 
     if not force:
         import questionary
+
         confirmed = questionary.confirm(
             f"Delete the entire index ({n} article(s) at {db_path})? This cannot be undone."
         ).ask()
@@ -526,6 +552,7 @@ def do_clear_db(force: bool = False) -> None:
 # ---------------------------------------------------------------------------
 # Typer subcommands (thin wrappers — all logic lives in do_* above)
 # ---------------------------------------------------------------------------
+
 
 @app.command()
 def search(query: str, retmax: int = 15):

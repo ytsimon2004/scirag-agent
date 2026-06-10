@@ -1,4 +1,5 @@
 """Tests for scirag.config — YAML loading and backend resolution."""
+
 from __future__ import annotations
 
 
@@ -40,20 +41,26 @@ def _patched_load_yaml(yaml_str: str):
 
 
 def test_backend_for_frontier(monkeypatch):
-    monkeypatch.setattr(cfg_module, "models_cfg", lambda: __import__("yaml").safe_load(_MODELS_YAML))
+    monkeypatch.setattr(
+        cfg_module, "models_cfg", lambda: __import__("yaml").safe_load(_MODELS_YAML)
+    )
     b = cfg_module.backend_for("synthesizer")
     assert b["model"] == "anthropic/claude-sonnet-4-6"
     assert "api_base" not in b
 
 
 def test_backend_for_local(monkeypatch):
-    monkeypatch.setattr(cfg_module, "models_cfg", lambda: __import__("yaml").safe_load(_MODELS_YAML))
+    monkeypatch.setattr(
+        cfg_module, "models_cfg", lambda: __import__("yaml").safe_load(_MODELS_YAML)
+    )
     b = cfg_module.backend_for("neuro_entity")
     assert b["model"].startswith("ollama/")
     assert b["api_base"] == "http://localhost:11434"
 
 
 def test_backend_for_unknown_agent(monkeypatch):
-    monkeypatch.setattr(cfg_module, "models_cfg", lambda: __import__("yaml").safe_load(_MODELS_YAML))
+    monkeypatch.setattr(
+        cfg_module, "models_cfg", lambda: __import__("yaml").safe_load(_MODELS_YAML)
+    )
     with pytest.raises(KeyError):
         cfg_module.backend_for("nonexistent_agent")

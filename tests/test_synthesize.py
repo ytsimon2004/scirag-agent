@@ -1,4 +1,5 @@
 """Tests for scirag.agents.synthesize — LLM call is mocked."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -45,7 +46,9 @@ class TestFormatSources:
 class TestSynthesize:
     def test_calls_complete_with_synthesizer_agent(self):
         node = _make_node("999", "Title", "2022", "Source text.")
-        with patch("scirag.agents.synthesize.complete", return_value="Cited answer [999].") as mock_complete:
+        with patch(
+            "scirag.agents.synthesize.complete", return_value="Cited answer [999]."
+        ) as mock_complete:
             answer = synthesize("What are place cells?", [node])
         mock_complete.assert_called_once()
         assert mock_complete.call_args[0][0] == "synthesizer"

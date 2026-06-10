@@ -4,6 +4,7 @@ Ollama model, and persists to an embedded LanceDB store.
 All DB paths route through scirag.projects.get_active_db_uri() so that
 multiple research projects can each have their own isolated index.
 """
+
 from __future__ import annotations
 
 from llama_index.core import Document, StorageContext, VectorStoreIndex
@@ -22,6 +23,7 @@ def _embed_model() -> OllamaEmbedding:
 
 def _vector_store() -> LanceDBVectorStore:
     from scirag.projects import get_active_db_uri
+
     return LanceDBVectorStore(
         uri=get_active_db_uri(),
         table_name=pipeline_cfg()["index"]["table"],
@@ -31,13 +33,8 @@ def _vector_store() -> LanceDBVectorStore:
 def build_index(articles: list[Article]) -> VectorStoreIndex:
     """Chunk + embed + persist a batch of articles. Idempotent-append."""
     idx = pipeline_cfg()["index"]
-    docs = [
-        Document(text=a.to_text(), metadata=a.metadata(), doc_id=a.pmid)
-        for a in articles
-    ]
-    splitter = SentenceSplitter(
-        chunk_size=idx["chunk_size"], chunk_overlap=idx["chunk_overlap"]
-    )
+    docs = [Document(text=a.to_text(), metadata=a.metadata(), doc_id=a.pmid) for a in articles]
+    splitter = SentenceSplitter(chunk_size=idx["chunk_size"], chunk_overlap=idx["chunk_overlap"])
     storage = StorageContext.from_defaults(vector_store=_vector_store())
     return VectorStoreIndex.from_documents(
         docs,
@@ -52,6 +49,7 @@ def get_indexed_pmids() -> set[str]:
     """Return PMIDs in the active project's index. Empty set if index doesn't exist."""
     import lancedb
     from scirag.projects import get_active_db_uri
+
     try:
         db = lancedb.connect(get_active_db_uri())
         tbl = db.open_table(pipeline_cfg()["index"]["table"])
@@ -65,6 +63,4 @@ def get_indexed_pmids() -> set[str]:
 
 def load_index() -> VectorStoreIndex:
     """Open the active project's LanceDB index for querying."""
-    return VectorStoreIndex.from_vector_store(
-        _vector_store(), embed_model=_embed_model()
-    )
+    return VectorStoreIndex.from_vector_store(_vector_store(), embed_model=_embed_model())

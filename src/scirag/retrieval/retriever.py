@@ -2,6 +2,7 @@
 fusion. BM25 is built over whatever nodes the vector store returns plus the
 docstore, so it stays in-process (no separate search server for the first cut).
 """
+
 from __future__ import annotations
 
 from llama_index.core.schema import NodeWithScore
@@ -37,9 +38,7 @@ def retrieve(query: str) -> list[NodeWithScore]:
         import warnings
         from llama_index.retrievers.bm25 import BM25Retriever
 
-        bm25 = BM25Retriever.from_defaults(
-            docstore=index.docstore, similarity_top_k=cfg["bm25_k"]
-        )
+        bm25 = BM25Retriever.from_defaults(docstore=index.docstore, similarity_top_k=cfg["bm25_k"])
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=RuntimeWarning, module="bm25s")
             warnings.filterwarnings("ignore", category=RuntimeWarning, module="numpy")

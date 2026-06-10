@@ -3,6 +3,7 @@
 Run:  uv run python -m scirag.mcp_server.server
 Requires the `mcp` extra:  uv sync --extra mcp
 """
+
 from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP

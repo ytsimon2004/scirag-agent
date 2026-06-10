@@ -1,4 +1,5 @@
 """Tests for scirag.sources.pubmed — all network calls are mocked."""
+
 from __future__ import annotations
 
 import warnings
@@ -24,6 +25,7 @@ from scirag.sources.pubmed import (
 # Article dataclass helpers
 # ---------------------------------------------------------------------------
 
+
 def test_article_url():
     a = Article(pmid="12345", title="T", abstract="A")
     assert a.url == "https://pubmed.ncbi.nlm.nih.gov/12345/"
@@ -45,8 +47,15 @@ def test_article_to_text_falls_back_when_full_text_empty():
 
 
 def test_article_metadata_keys():
-    a = Article(pmid="1", title="T", abstract="A", journal="J", year="2024",
-                doi="10.1038/s41586-000", mesh_terms=["memory", "hippocampus"])
+    a = Article(
+        pmid="1",
+        title="T",
+        abstract="A",
+        journal="J",
+        year="2024",
+        doi="10.1038/s41586-000",
+        mesh_terms=["memory", "hippocampus"],
+    )
     md = a.metadata()
     assert set(md) == {"pmid", "title", "journal", "year", "url", "doi", "mesh", "text_source"}
     assert md["mesh"] == "memory, hippocampus"
@@ -355,6 +364,7 @@ def test_enrich_falls_back_to_unpaywall(mock_pmc, mock_unp, mock_dl):
 # enrich_with_fulltext — PMC path + warning
 # ---------------------------------------------------------------------------
 
+
 @patch("scirag.sources.pubmed._fetch_pmc_fulltext", return_value="Results section text.")
 @patch("scirag.sources.pubmed._pmids_to_pmcids", return_value={"99999": "7654321"})
 def test_enrich_with_fulltext_sets_fields(mock_pmcids, mock_fulltext):
@@ -383,15 +393,16 @@ def test_enrich_with_fulltext_empty_list():
 # Full pipeline: search → fetch → enrich
 # ---------------------------------------------------------------------------
 
+
 @patch("scirag.sources.pubmed._download_pdf_results", return_value="")
 @patch("scirag.sources.pubmed._unpaywall_pdf_url", return_value="")
 @patch("scirag.sources.pubmed._get")
 def test_full_pipeline_search_fetch_enrich(mock_get, mock_unp, mock_dl):
     mock_get.side_effect = [
-        _mock_response(_ESEARCH_XML),   # search
-        _mock_response(_EFETCH_XML),    # fetch
-        _mock_response(_ELINK_XML),     # pmids_to_pmcids
-        _mock_response(_JATS_XML),      # fetch_pmc_fulltext
+        _mock_response(_ESEARCH_XML),  # search
+        _mock_response(_EFETCH_XML),  # fetch
+        _mock_response(_ELINK_XML),  # pmids_to_pmcids
+        _mock_response(_JATS_XML),  # fetch_pmc_fulltext
     ]
     articles = search_and_fetch("place cells", retmax=2)
     with warnings.catch_warnings(record=True):

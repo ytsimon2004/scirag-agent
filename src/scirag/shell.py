@@ -1,4 +1,5 @@
 """Interactive scirag shell — launched by `scirag` with no arguments."""
+
 from __future__ import annotations
 
 import shlex
@@ -14,23 +15,23 @@ from rich.table import Table
 console = Console()
 
 _COMMANDS: dict[str, str] = {
-    "/search":         "<query> [--retmax N]               — search PubMed, show full-text availability",
-    "/index":          "<query> [--retmax N] [--full-text]  — interactive fetch + select + index",
-    "/retrieve":       "<query>                             — query local index (no LLM)",
-    "/llm":            "<question> [--reset]               — RAG answer with sources + conversation memory",
-    "/llm-ui":         "[--port N]                          — open Chainlit web UI in browser",
-    "/model":          "[backend-key]                       — list or switch LLM backend",
-    "/import-pdf":     "<path>                              — index a single PDF (Results section only)",
-    "/import-dir":     "<path>                              — index all PDFs in a directory",
-    "/env":            "[set <KEY> <val> | unset <KEY>]     — manage API keys in ~/.scirag-agent/.env",
-    "/status":         "                                    — show index statistics",
-    "/clear-db":       "[--force]                           — delete the active index",
+    "/search": "<query> [--retmax N]               — search PubMed, show full-text availability",
+    "/index": "<query> [--retmax N] [--full-text]  — interactive fetch + select + index",
+    "/retrieve": "<query>                             — query local index (no LLM)",
+    "/llm": "<question> [--reset]               — RAG answer with sources + conversation memory",
+    "/llm-ui": "[--port N]                          — open Chainlit web UI in browser",
+    "/model": "[backend-key]                       — list or switch LLM backend",
+    "/import-pdf": "<path>                              — index a single PDF (Results section only)",
+    "/import-dir": "<path>                              — index all PDFs in a directory",
+    "/env": "[set <KEY> <val> | unset <KEY>]     — manage API keys in ~/.scirag-agent/.env",
+    "/status": "                                    — show index statistics",
+    "/clear-db": "[--force]                           — delete the active index",
     "/create-project": "<name> [description]               — create a new project and switch to it",
-    "/project":        "[name|--default]                   — list projects or switch to one",
+    "/project": "[name|--default]                   — list projects or switch to one",
     "/delete-project": "<name> [--force]                   — delete a project and its index",
-    "/help":           "                                    — show this help",
-    "/clear":          "                                    — clear the screen",
-    "/exit":           "                                    — exit scirag",
+    "/help": "                                    — show this help",
+    "/clear": "                                    — clear the screen",
+    "/exit": "                                    — exit scirag",
 }
 
 _COMPLETER = WordCompleter(list(_COMMANDS), sentence=True)
@@ -38,6 +39,7 @@ _COMPLETER = WordCompleter(list(_COMMANDS), sentence=True)
 
 def _prompt() -> HTML:
     from scirag.projects import get_active_project
+
     project = get_active_project()
     if project:
         return HTML(
@@ -52,6 +54,7 @@ def _ollama_status() -> str:
     try:
         import httpx
         from scirag.config import models_cfg
+
         base = models_cfg()["embeddings"]["api_base"]
         httpx.get(f"{base}/api/tags", timeout=1.5).raise_for_status()
         return "[green]running[/]"
@@ -65,11 +68,11 @@ def _banner() -> None:
     from scirag.ingest.index import get_indexed_pmids
     from scirag.projects import get_active_project
 
-    emb      = models_cfg()["embeddings"]["model"]
-    llm_key  = active_backend_key("synthesizer")
+    emb = models_cfg()["embeddings"]["model"]
+    llm_key = active_backend_key("synthesizer")
     llm_model = models_cfg()["backends"][llm_key]["model"]
-    project  = get_active_project() or "[dim]none (global)[/]"
-    cwd      = Path.cwd()
+    project = get_active_project() or "[dim]none (global)[/]"
+    cwd = Path.cwd()
 
     try:
         n_articles = len(get_indexed_pmids())
@@ -90,11 +93,11 @@ def _banner() -> None:
     console.print(f"╭{sep}╮")
     console.print("│  [bold cyan]scirag-agent[/]  [dim]scientific RAG · PubMed/PMC[/]")
     console.print(f"│{sep}│")
-    console.print(row("llm:",      f"[cyan]{llm_model}[/]  [dim]/model to change[/]"))
+    console.print(row("llm:", f"[cyan]{llm_model}[/]  [dim]/model to change[/]"))
     console.print(row("embedding:", f"[dim]{emb}[/]"))
-    console.print(row("ollama:",   ollama))
-    console.print(row("project:",  f"[yellow]{project}[/]" if get_active_project() else project))
-    console.print(row("index:",    f"[dim]{index_str}[/]"))
+    console.print(row("ollama:", ollama))
+    console.print(row("project:", f"[yellow]{project}[/]" if get_active_project() else project))
+    console.print(row("index:", f"[dim]{index_str}[/]"))
     console.print(row("directory:", f"[dim]{cwd}[/]"))
     console.print(f"╰{sep}╯")
     console.print()
@@ -104,13 +107,16 @@ def _banner() -> None:
     try:
         from scirag.ingest.index import get_indexed_pmids
         from scirag.projects import get_active_project
+
         project = get_active_project()
         pmids = get_indexed_pmids()
         label = f"project [cyan]{project}[/]" if project else "global index"
         if pmids:
             console.print(f"[dim]  {label} — {len(pmids)} article(s) stored.[/]\n")
         else:
-            console.print(f"[dim]  {label} is empty — run [/][cyan]/index <query>[/][dim] to populate.[/]\n")
+            console.print(
+                f"[dim]  {label} is empty — run [/][cyan]/index <query>[/][dim] to populate.[/]\n"
+            )
     except Exception:
         pass
 
@@ -131,15 +137,15 @@ def _parse_flags(args: list[str]) -> tuple[list[str], dict]:
     while i < len(args):
         if args[i].startswith("--"):
             token = args[i][2:]
-            if "=" in token:                              # --key=value
+            if "=" in token:  # --key=value
                 key, val = token.split("=", 1)
                 flags[key] = val
                 i += 1
             elif i + 1 < len(args) and not args[i + 1].startswith("--"):
-                flags[token] = args[i + 1]               # --key value
+                flags[token] = args[i + 1]  # --key value
                 i += 2
             else:
-                flags[token] = True                      # --flag (boolean)
+                flags[token] = True  # --flag (boolean)
                 i += 1
         else:
             positional.append(args[i])
@@ -174,19 +180,22 @@ def _dispatch(line: str) -> None:
 
     if cmd == "/env":
         from scirag.cli import do_env
+
         action = positional[0] if positional else ""
-        key    = positional[1] if len(positional) > 1 else ""
-        value  = " ".join(positional[2:]) if len(positional) > 2 else ""
+        key = positional[1] if len(positional) > 1 else ""
+        value = " ".join(positional[2:]) if len(positional) > 2 else ""
         do_env(action, key, value)
         return
 
     if cmd == "/status":
         from scirag.cli import do_status
+
         do_status()
         return
 
     if cmd == "/clear-db":
         from scirag.cli import do_clear_db
+
         do_clear_db(force="force" in flags)
         return
 
@@ -196,11 +205,13 @@ def _dispatch(line: str) -> None:
             return
         name = positional[0]
         from scirag.projects import delete_project, get_active_project, list_projects
+
         if not any(p["name"] == name for p in list_projects()):
             console.print(f"[red]Project {name!r} not found.[/]")
             return
         if not flags.get("force"):
             import questionary
+
             confirmed = questionary.confirm(
                 f"Delete project '{name}' and all its indexed articles? This cannot be undone."
             ).ask()
@@ -223,6 +234,7 @@ def _dispatch(line: str) -> None:
         name = positional[0]
         desc = " ".join(positional[1:])
         from scirag.projects import create_project, set_active_project
+
         try:
             create_project(name, desc)
             set_active_project(name)
@@ -233,17 +245,20 @@ def _dispatch(line: str) -> None:
 
     if cmd == "/project":
         from scirag.projects import (
-            create_project, delete_project, get_active_project,
-            list_projects, set_active_project,
+            create_project,
+            delete_project,
+            get_active_project,
+            list_projects,
+            set_active_project,
         )
+
         if not positional and "default" not in flags:
             # List all projects
             projects = list_projects()
             active = get_active_project()
             if not projects:
                 console.print(
-                    "[yellow]No projects yet.[/] "
-                    "Use [cyan]/create-project <name>[/] to create one."
+                    "[yellow]No projects yet.[/] Use [cyan]/create-project <name>[/] to create one."
                 )
             else:
                 for p in projects:
@@ -276,6 +291,7 @@ def _dispatch(line: str) -> None:
             console.print("[yellow]Usage:[/] /search <query> [--retmax N]")
             return
         from scirag.cli import do_search
+
         do_search(query, retmax=int(flags.get("retmax", 15)))
 
     elif cmd == "/index":
@@ -283,6 +299,7 @@ def _dispatch(line: str) -> None:
             console.print("[yellow]Usage:[/] /index <query> [--retmax N] [--full-text]")
             return
         from scirag.cli import do_index
+
         do_index(
             query,
             retmax=int(flags.get("retmax", 25)),
@@ -294,25 +311,32 @@ def _dispatch(line: str) -> None:
             console.print("[yellow]Usage:[/] /retrieve <query>")
             return
         from scirag.cli import do_retrieve
+
         do_retrieve(query)
 
     elif cmd == "/llm":
         if flags.get("reset"):
             from scirag.cli import do_llm
+
             do_llm("", reset=True)
         elif not query:
-            console.print("[yellow]Usage:[/] /llm <question>  [dim](or /llm --reset to clear history)[/]")
+            console.print(
+                "[yellow]Usage:[/] /llm <question>  [dim](or /llm --reset to clear history)[/]"
+            )
         else:
             from scirag.cli import do_llm
+
             do_llm(query)
 
     elif cmd == "/llm-ui":
         from scirag.cli import do_llm_ui
+
         port = int(flags.get("port", 8000))
         do_llm_ui(port)
 
     elif cmd == "/model":
         from scirag.cli import do_model
+
         do_model(query)
 
     elif cmd == "/import-pdf":
@@ -320,6 +344,7 @@ def _dispatch(line: str) -> None:
             console.print("[yellow]Usage:[/] /import-pdf <path>")
             return
         from scirag.cli import do_import_pdf
+
         do_import_pdf(query)
 
     elif cmd == "/import-dir":
@@ -327,6 +352,7 @@ def _dispatch(line: str) -> None:
             console.print("[yellow]Usage:[/] /import-dir <path>")
             return
         from scirag.cli import do_import_dir
+
         do_import_dir(query)
 
     else:

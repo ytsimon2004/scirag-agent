@@ -3,6 +3,7 @@
 This is the raw data-source client. The same functions are re-exported as MCP
 tools in scirag.mcp_server so agents can call them through the MCP protocol.
 """
+
 from __future__ import annotations
 
 import os
@@ -158,6 +159,7 @@ def search_and_fetch(query: str, retmax: int = 25) -> list[Article]:
 # PMC full-text (Results section only)
 # ---------------------------------------------------------------------------
 
+
 def _pmids_to_pmcids(pmids: list[str]) -> dict[str, str]:
     """Map PubMed IDs to PMC IDs via elink. Returns only PMIDs that have a PMC entry."""
     r = _get(
@@ -184,9 +186,7 @@ def _extract_results_from_jats(root: ET.Element) -> str:
     for sec in root.iter():
         if sec.tag != "sec" and not sec.tag.endswith("}sec"):
             continue
-        title_el = next(
-            (c for c in sec if c.tag == "title" or c.tag.endswith("}title")), None
-        )
+        title_el = next((c for c in sec if c.tag == "title" or c.tag.endswith("}title")), None)
         if title_el is None:
             continue
         if "result" not in "".join(title_el.itertext()).lower():
@@ -218,6 +218,7 @@ def _fetch_pmc_fulltext(pmc_id: str) -> str:
 # ---------------------------------------------------------------------------
 # Unpaywall fallback
 # ---------------------------------------------------------------------------
+
 
 def _unpaywall_pdf_url(doi: str) -> str:
     """Return the best open-access PDF URL for a DOI via Unpaywall, or ''."""
@@ -256,6 +257,7 @@ def _download_pdf_results(url: str) -> str:
 # ---------------------------------------------------------------------------
 # Public enrichment entry point
 # ---------------------------------------------------------------------------
+
 
 def enrich_with_fulltext(articles: list[Article]) -> None:
     """Enrich articles with Results-section text via PMC then Unpaywall.

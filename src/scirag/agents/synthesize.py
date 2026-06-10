@@ -1,6 +1,7 @@
 """Synthesis agent: turns retrieved passages into a grounded, cited answer.
 Citations use [PMID] markers tied to the source metadata.
 """
+
 from __future__ import annotations
 
 from llama_index.core.schema import NodeWithScore

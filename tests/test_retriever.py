@@ -1,4 +1,5 @@
 """Tests for scirag.retrieval.retriever — index and pipeline config are mocked."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -73,6 +74,7 @@ class TestRetrieve:
         mock_load_index.return_value.as_retriever.return_value = mock_retriever
 
         from scirag.retrieval.retriever import retrieve
+
         result = retrieve("place cells")
         assert len(result) == 3  # final_k=3
 
@@ -90,5 +92,6 @@ class TestRetrieve:
 
         with patch.dict("sys.modules", {"llama_index.retrievers.bm25": None}):
             from scirag.retrieval.retriever import retrieve
+
             result = retrieve("grid cells")
         assert len(result) == 3

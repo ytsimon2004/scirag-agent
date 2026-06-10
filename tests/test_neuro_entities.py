@@ -1,4 +1,5 @@
 """Tests for scirag.neuro.entities — LLM call is fully mocked."""
+
 from __future__ import annotations
 
 import json
@@ -40,8 +41,13 @@ class TestExtractEntities:
 
     def test_partial_json_wrapped_in_prose(self):
         """LLM sometimes wraps JSON in prose; parser should still extract it."""
-        payload = {"brain_region": ["amygdala"], "neurotransmitter": ["dopamine"],
-                   "gene_protein": [], "method": [], "species": []}
+        payload = {
+            "brain_region": ["amygdala"],
+            "neurotransmitter": ["dopamine"],
+            "gene_protein": [],
+            "method": [],
+            "species": [],
+        }
         with _mock_complete(f"Here you go: {json.dumps(payload)} — done."):
             result = extract_entities("dopamine in amygdala")
         assert result["brain_region"] == ["amygdala"]
@@ -58,8 +64,13 @@ class TestExtractEntities:
 
 class TestExpandQuery:
     def test_appends_terms(self):
-        entities = {"brain_region": ["hippocampus"], "method": ["2P imaging"],
-                    "neurotransmitter": [], "gene_protein": [], "species": []}
+        entities = {
+            "brain_region": ["hippocampus"],
+            "method": ["2P imaging"],
+            "neurotransmitter": [],
+            "gene_protein": [],
+            "species": [],
+        }
         expanded = expand_query("place cells", entities)
         assert expanded.startswith("place cells")
         assert "hippocampus" in expanded
@@ -70,8 +81,13 @@ class TestExpandQuery:
         assert expand_query("place cells", entities) == "place cells"
 
     def test_no_duplicate_query(self):
-        entities = {"brain_region": ["hippocampus"], "method": [],
-                    "neurotransmitter": [], "gene_protein": [], "species": []}
+        entities = {
+            "brain_region": ["hippocampus"],
+            "method": [],
+            "neurotransmitter": [],
+            "gene_protein": [],
+            "species": [],
+        }
         expanded = expand_query("hippocampus", entities)
         # Query appears once at start, entity appended once — not duplicated arbitrarily
         assert expanded.count("hippocampus") >= 1

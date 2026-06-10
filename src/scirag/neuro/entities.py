@@ -5,6 +5,7 @@ regions, neurotransmitters, genes/proteins, methods) from a query so the
 retriever can expand/filter. Replace the `_ONTOLOGIES` hooks with real lookups
 (Allen Brain Atlas, NCBI Gene, UniProt, ChEBI, MeSH) as you build them out.
 """
+
 from __future__ import annotations
 
 import json

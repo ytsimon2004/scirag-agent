@@ -1,4 +1,5 @@
 """Tests for scirag.sources.pdf — PDF text extraction and Results-section isolation."""
+
 from __future__ import annotations
 
 import warnings
@@ -70,9 +71,9 @@ def test_extract_results_section_standard():
 
 def test_extract_results_section_excludes_other_sections():
     text = extract_results_section(_FULL_PAPER)
-    assert "Spatial navigation" not in text   # Introduction
-    assert "tetrodes" not in text             # Methods
-    assert "previous work" not in text        # Discussion
+    assert "Spatial navigation" not in text  # Introduction
+    assert "tetrodes" not in text  # Methods
+    assert "previous work" not in text  # Discussion
 
 
 def test_extract_results_and_discussion_variant():
@@ -94,6 +95,7 @@ def test_extract_results_section_empty_string():
 # _pmid_from_stem
 # ---------------------------------------------------------------------------
 
+
 def test_pmid_from_stem_numeric():
     assert _pmid_from_stem("12345678") == "12345678"
 
@@ -111,6 +113,7 @@ def test_pmid_from_stem_deterministic():
 # ---------------------------------------------------------------------------
 # load_pdf_as_article — pypdf is mocked
 # ---------------------------------------------------------------------------
+
 
 def _make_pdf_reader(text: str) -> MagicMock:
     page = MagicMock()
@@ -163,6 +166,7 @@ def test_load_pdf_abstract_is_empty(mock_reader_cls, tmp_path):
 # ---------------------------------------------------------------------------
 # load_pdf_directory
 # ---------------------------------------------------------------------------
+
 
 @patch("scirag.sources.pdf.pypdf.PdfReader")
 def test_load_pdf_directory(mock_reader_cls, tmp_path):
