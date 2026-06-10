@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 from unittest.mock import patch
 
-import pytest
 
 from scirag.neuro.entities import _ONTOLOGIES, expand_query, extract_entities
 

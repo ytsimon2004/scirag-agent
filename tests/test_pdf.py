@@ -1,12 +1,9 @@
 """Tests for scirag.sources.pdf — PDF text extraction and Results-section isolation."""
 from __future__ import annotations
 
-import io
 import warnings
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from scirag.sources.pdf import (
     _pmid_from_stem,

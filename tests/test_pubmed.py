@@ -5,11 +5,9 @@ import warnings
 from unittest.mock import MagicMock, patch
 from xml.etree import ElementTree as ET
 
-import pytest
 
 from scirag.sources.pubmed import (
     Article,
-    _download_pdf_results,
     _extract_results_from_jats,
     _fetch_pmc_fulltext,
     _parse_article,

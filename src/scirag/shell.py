@@ -61,10 +61,9 @@ def _ollama_status() -> str:
 
 def _banner() -> None:
     from pathlib import Path
-    from rich.padding import Padding
     from scirag.config import active_backend_key, models_cfg
     from scirag.ingest.index import get_indexed_pmids
-    from scirag.projects import get_active_db_uri, get_active_project
+    from scirag.projects import get_active_project
 
     emb      = models_cfg()["embeddings"]["model"]
     llm_key  = active_backend_key("synthesizer")
@@ -89,7 +88,7 @@ def _banner() -> None:
 
     console.print()
     console.print(f"╭{sep}╮")
-    console.print(f"│  [bold cyan]scirag-agent[/]  [dim]scientific RAG · PubMed/PMC[/]")
+    console.print("│  [bold cyan]scirag-agent[/]  [dim]scientific RAG · PubMed/PMC[/]")
     console.print(f"│{sep}│")
     console.print(row("llm:",      f"[cyan]{llm_model}[/]  [dim]/model to change[/]"))
     console.print(row("embedding:", f"[dim]{emb}[/]"))

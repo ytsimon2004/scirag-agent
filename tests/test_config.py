@@ -1,7 +1,6 @@
 """Tests for scirag.config — YAML loading and backend resolution."""
 from __future__ import annotations
 
-from unittest.mock import mock_open, patch
 
 import pytest
 

@@ -197,7 +197,6 @@ _LLM_AGENTS = ("synthesizer", "critic", "neuro_entity", "planner", "retriever")
 
 def do_model(backend_key: str = "") -> None:
     """List available backends or switch all LLM agents to a new backend."""
-    from rich.table import Table
     from scirag.config import active_backend_key, models_cfg, set_agent_backend
 
     cfg = models_cfg()
@@ -481,7 +480,7 @@ def do_llm_ui(port: int = 8000) -> None:
             pass
 
     webbrowser.open(url)
-    console.print(f"[green]Web UI open.[/] Press [bold]Ctrl+C[/] to stop.")
+    console.print("[green]Web UI open.[/] Press [bold]Ctrl+C[/] to stop.")
     try:
         proc.wait()
     except KeyboardInterrupt:

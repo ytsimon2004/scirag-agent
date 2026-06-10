@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from scirag.retrieval.retriever import _rrf
 
@@ -89,7 +88,6 @@ class TestRetrieve:
         # BM25Retriever import will fail in test env — retriever must degrade gracefully
         mock_load_index.return_value = index
 
-        from scirag.retrieval import retriever as ret_mod
         with patch.dict("sys.modules", {"llama_index.retrievers.bm25": None}):
             from scirag.retrieval.retriever import retrieve
             result = retrieve("grid cells")
