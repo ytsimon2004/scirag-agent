@@ -1,4 +1,4 @@
-"""Tests for scireg.sources.pdf — PDF text extraction and Results-section isolation."""
+"""Tests for scirag.sources.pdf — PDF text extraction and Results-section isolation."""
 from __future__ import annotations
 
 import io
@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from scireg.sources.pdf import (
+from scirag.sources.pdf import (
     _pmid_from_stem,
     extract_results_section,
     load_pdf_as_article,
@@ -123,7 +123,7 @@ def _make_pdf_reader(text: str) -> MagicMock:
     return reader
 
 
-@patch("scireg.sources.pdf.pypdf.PdfReader")
+@patch("scirag.sources.pdf.pypdf.PdfReader")
 def test_load_pdf_numeric_filename_becomes_pmid(mock_reader_cls, tmp_path):
     mock_reader_cls.return_value = _make_pdf_reader(_FULL_PAPER)
     pdf = tmp_path / "12345678.pdf"
@@ -132,7 +132,7 @@ def test_load_pdf_numeric_filename_becomes_pmid(mock_reader_cls, tmp_path):
     assert article.pmid == "12345678"
 
 
-@patch("scireg.sources.pdf.pypdf.PdfReader")
+@patch("scirag.sources.pdf.pypdf.PdfReader")
 def test_load_pdf_results_section_extracted(mock_reader_cls, tmp_path):
     mock_reader_cls.return_value = _make_pdf_reader(_FULL_PAPER)
     pdf = tmp_path / "paper.pdf"
@@ -142,7 +142,7 @@ def test_load_pdf_results_section_extracted(mock_reader_cls, tmp_path):
     assert "Spatial navigation" not in article.full_text
 
 
-@patch("scireg.sources.pdf.pypdf.PdfReader")
+@patch("scirag.sources.pdf.pypdf.PdfReader")
 def test_load_pdf_falls_back_when_no_results_section(mock_reader_cls, tmp_path):
     mock_reader_cls.return_value = _make_pdf_reader(_PAPER_NO_RESULTS)
     pdf = tmp_path / "paper.pdf"
@@ -154,7 +154,7 @@ def test_load_pdf_falls_back_when_no_results_section(mock_reader_cls, tmp_path):
     assert article.full_text == ""  # no fallback — only Results section allowed
 
 
-@patch("scireg.sources.pdf.pypdf.PdfReader")
+@patch("scirag.sources.pdf.pypdf.PdfReader")
 def test_load_pdf_abstract_is_empty(mock_reader_cls, tmp_path):
     mock_reader_cls.return_value = _make_pdf_reader(_FULL_PAPER)
     pdf = tmp_path / "paper.pdf"
@@ -167,7 +167,7 @@ def test_load_pdf_abstract_is_empty(mock_reader_cls, tmp_path):
 # load_pdf_directory
 # ---------------------------------------------------------------------------
 
-@patch("scireg.sources.pdf.pypdf.PdfReader")
+@patch("scirag.sources.pdf.pypdf.PdfReader")
 def test_load_pdf_directory(mock_reader_cls, tmp_path):
     mock_reader_cls.return_value = _make_pdf_reader(_FULL_PAPER)
     for name in ("11111.pdf", "22222.pdf"):
@@ -186,7 +186,7 @@ def test_load_pdf_directory_empty(tmp_path):
     assert any("No PDF files" in str(w.message) for w in caught)
 
 
-@patch("scireg.sources.pdf.pypdf.PdfReader")
+@patch("scirag.sources.pdf.pypdf.PdfReader")
 def test_load_pdf_directory_skips_broken_file(mock_reader_cls, tmp_path):
     (tmp_path / "good.pdf").touch()
     (tmp_path / "bad.pdf").touch()

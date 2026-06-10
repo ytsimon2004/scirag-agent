@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from llama_index.core.schema import NodeWithScore
 
-from scireg.config import pipeline_cfg
-from scireg.ingest.index import load_index
+from scirag.config import pipeline_cfg
+from scirag.ingest.index import load_index
 
 
 def _rrf(rankings: list[list[NodeWithScore]], k: int = 60) -> list[NodeWithScore]:

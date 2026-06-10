@@ -1,11 +1,11 @@
-"""Tests for scireg.config — YAML loading and backend resolution."""
+"""Tests for scirag.config — YAML loading and backend resolution."""
 from __future__ import annotations
 
 from unittest.mock import mock_open, patch
 
 import pytest
 
-from scireg import config as cfg_module
+from scirag import config as cfg_module
 
 
 _MODELS_YAML = """

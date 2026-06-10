@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from llama_index.core.schema import NodeWithScore
 
-from scireg.llm.router import complete
+from scirag.llm.router import complete
 
 SYSTEM = (
     "You are a neuroscience literature assistant. Answer ONLY from the provided "

@@ -1,6 +1,6 @@
 """PDF ingestion: text extraction and Results-section isolation.
 
-Used by manual import commands (`scireg import-pdf / import-dir`) and
+Used by manual import commands (`scirag import-pdf / import-dir`) and
 by the Unpaywall fallback in sources/pubmed.py.
 """
 from __future__ import annotations
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pypdf
 
-from scireg.sources.pubmed import Article
+from scirag.sources.pubmed import Article
 
 # Headings that start the Results section (and variants like "Results and Discussion")
 _RESULTS_RE = re.compile(

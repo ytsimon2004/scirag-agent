@@ -1,4 +1,4 @@
-"""Tests for scireg.sources.pubmed — all network calls are mocked."""
+"""Tests for scirag.sources.pubmed — all network calls are mocked."""
 from __future__ import annotations
 
 import warnings
@@ -7,7 +7,7 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
-from scireg.sources.pubmed import (
+from scirag.sources.pubmed import (
     Article,
     _download_pdf_results,
     _extract_results_from_jats,
@@ -163,7 +163,7 @@ def _mock_response(text: str) -> MagicMock:
     return r
 
 
-@patch("scireg.sources.pubmed._get")
+@patch("scirag.sources.pubmed._get")
 def test_search_returns_pmids(mock_get):
     mock_get.return_value = _mock_response(_ESEARCH_XML)
     pmids = search("hippocampal place cells")
@@ -173,7 +173,7 @@ def test_search_returns_pmids(mock_get):
     assert call_path == "esearch.fcgi"
 
 
-@patch("scireg.sources.pubmed._get")
+@patch("scirag.sources.pubmed._get")
 def test_fetch_returns_articles(mock_get):
     mock_get.return_value = _mock_response(_EFETCH_XML)
     articles = fetch(["99999"])
@@ -181,14 +181,14 @@ def test_fetch_returns_articles(mock_get):
     assert articles[0].pmid == "99999"
 
 
-@patch("scireg.sources.pubmed._get")
+@patch("scirag.sources.pubmed._get")
 def test_fetch_empty_list(mock_get):
     articles = fetch([])
     assert articles == []
     mock_get.assert_not_called()
 
 
-@patch("scireg.sources.pubmed._get")
+@patch("scirag.sources.pubmed._get")
 def test_search_and_fetch(mock_get):
     mock_get.side_effect = [
         _mock_response(_ESEARCH_XML),
@@ -249,7 +249,7 @@ def test_extract_results_from_jats_no_results_section():
     assert _extract_results_from_jats(root) == ""
 
 
-@patch("scireg.sources.pubmed._get")
+@patch("scirag.sources.pubmed._get")
 def test_fetch_pmc_fulltext_returns_results_only(mock_get):
     mock_get.return_value = _mock_response(_JATS_XML)
     text = _fetch_pmc_fulltext("7654321")
@@ -257,7 +257,7 @@ def test_fetch_pmc_fulltext_returns_results_only(mock_get):
     assert "Place cells fire" not in text  # Introduction excluded
 
 
-@patch("scireg.sources.pubmed._get")
+@patch("scirag.sources.pubmed._get")
 def test_fetch_pmc_fulltext_returns_empty_on_error(mock_get):
     mock_get.side_effect = Exception("network error")
     assert _fetch_pmc_fulltext("bad_id") == ""
@@ -289,7 +289,7 @@ _ELINK_NO_RESULTS_XML = """
 """
 
 
-@patch("scireg.sources.pubmed._get")
+@patch("scirag.sources.pubmed._get")
 def test_pmids_to_pmcids_maps_correctly(mock_get):
     mock_get.return_value = _mock_response(_ELINK_XML)
     result = _pmids_to_pmcids(["99999"])
@@ -297,7 +297,7 @@ def test_pmids_to_pmcids_maps_correctly(mock_get):
     assert mock_get.call_args[0][0] == "elink.fcgi"
 
 
-@patch("scireg.sources.pubmed._get")
+@patch("scirag.sources.pubmed._get")
 def test_pmids_to_pmcids_no_pmc_entry(mock_get):
     mock_get.return_value = _mock_response(_ELINK_NO_RESULTS_XML)
     result = _pmids_to_pmcids(["99999"])
@@ -321,14 +321,14 @@ def _mock_httpx_response(text: str, status: int = 200) -> MagicMock:
     return r
 
 
-@patch("scireg.sources.pubmed.httpx.get")
+@patch("scirag.sources.pubmed.httpx.get")
 def test_unpaywall_pdf_url_found(mock_get):
     mock_get.return_value = _mock_httpx_response(_UNPAYWALL_JSON_WITH_PDF)
     url = _unpaywall_pdf_url("10.1038/nn.9999")
     assert url == "https://example.com/paper.pdf"
 
 
-@patch("scireg.sources.pubmed.httpx.get")
+@patch("scirag.sources.pubmed.httpx.get")
 def test_unpaywall_pdf_url_no_oa(mock_get):
     mock_get.return_value = _mock_httpx_response(_UNPAYWALL_JSON_NO_OA)
     assert _unpaywall_pdf_url("10.1038/nn.9999") == ""
@@ -338,15 +338,15 @@ def test_unpaywall_pdf_url_empty_doi():
     assert _unpaywall_pdf_url("") == ""
 
 
-@patch("scireg.sources.pubmed.httpx.get")
+@patch("scirag.sources.pubmed.httpx.get")
 def test_unpaywall_returns_empty_on_error(mock_get):
     mock_get.side_effect = Exception("network error")
     assert _unpaywall_pdf_url("10.1038/nn.9999") == ""
 
 
-@patch("scireg.sources.pubmed._download_pdf_results", return_value="Results from PDF.")
-@patch("scireg.sources.pubmed._unpaywall_pdf_url", return_value="https://example.com/paper.pdf")
-@patch("scireg.sources.pubmed._pmids_to_pmcids", return_value={})
+@patch("scirag.sources.pubmed._download_pdf_results", return_value="Results from PDF.")
+@patch("scirag.sources.pubmed._unpaywall_pdf_url", return_value="https://example.com/paper.pdf")
+@patch("scirag.sources.pubmed._pmids_to_pmcids", return_value={})
 def test_enrich_falls_back_to_unpaywall(mock_pmc, mock_unp, mock_dl):
     article = Article(pmid="99999", title="T", abstract="A", doi="10.1038/nn.9999")
     enrich_with_fulltext([article])
@@ -357,8 +357,8 @@ def test_enrich_falls_back_to_unpaywall(mock_pmc, mock_unp, mock_dl):
 # enrich_with_fulltext — PMC path + warning
 # ---------------------------------------------------------------------------
 
-@patch("scireg.sources.pubmed._fetch_pmc_fulltext", return_value="Results section text.")
-@patch("scireg.sources.pubmed._pmids_to_pmcids", return_value={"99999": "7654321"})
+@patch("scirag.sources.pubmed._fetch_pmc_fulltext", return_value="Results section text.")
+@patch("scirag.sources.pubmed._pmids_to_pmcids", return_value={"99999": "7654321"})
 def test_enrich_with_fulltext_sets_fields(mock_pmcids, mock_fulltext):
     article = Article(pmid="99999", title="T", abstract="A")
     enrich_with_fulltext([article])
@@ -366,8 +366,8 @@ def test_enrich_with_fulltext_sets_fields(mock_pmcids, mock_fulltext):
     assert article.full_text == "Results section text."
 
 
-@patch("scireg.sources.pubmed._unpaywall_pdf_url", return_value="")
-@patch("scireg.sources.pubmed._pmids_to_pmcids", return_value={})
+@patch("scirag.sources.pubmed._unpaywall_pdf_url", return_value="")
+@patch("scirag.sources.pubmed._pmids_to_pmcids", return_value={})
 def test_enrich_warns_when_no_full_text(mock_pmcids, mock_unp):
     article = Article(pmid="99999", title="T", abstract="A")
     with warnings.catch_warnings(record=True) as caught:
@@ -385,9 +385,9 @@ def test_enrich_with_fulltext_empty_list():
 # Full pipeline: search → fetch → enrich
 # ---------------------------------------------------------------------------
 
-@patch("scireg.sources.pubmed._download_pdf_results", return_value="")
-@patch("scireg.sources.pubmed._unpaywall_pdf_url", return_value="")
-@patch("scireg.sources.pubmed._get")
+@patch("scirag.sources.pubmed._download_pdf_results", return_value="")
+@patch("scirag.sources.pubmed._unpaywall_pdf_url", return_value="")
+@patch("scirag.sources.pubmed._get")
 def test_full_pipeline_search_fetch_enrich(mock_get, mock_unp, mock_dl):
     mock_get.side_effect = [
         _mock_response(_ESEARCH_XML),   # search

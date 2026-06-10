@@ -1,5 +1,5 @@
 [project]
-name = "scireg"
+name = "scirag-agent"
 version = "0.1.0"
 description = "Multi-agent RAG for scientific literature retrieval, with neuroscience-specific agents"
 readme = "README.md"
@@ -39,14 +39,14 @@ eval = ["ragas>=0.2.0"]
 dev = ["pytest>=8.0", "ruff>=0.6.0"]
 
 [project.scripts]
-scireg = "scireg.cli:app"
+scirag = "scirag.cli:app"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/scireg"]
+packages = ["src/scirag"]
 
 [tool.ruff]
 line-length = 100

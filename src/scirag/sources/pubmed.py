@@ -1,7 +1,7 @@
 """PubMed retrieval via NCBI E-utilities (esearch + efetch).
 
 This is the raw data-source client. The same functions are re-exported as MCP
-tools in scireg.mcp_server so agents can call them through the MCP protocol.
+tools in scirag.mcp_server so agents can call them through the MCP protocol.
 """
 from __future__ import annotations
 
@@ -74,7 +74,7 @@ def _params(**extra) -> dict:
         p["api_key"] = key
     if email := os.getenv("NCBI_EMAIL"):
         p["email"] = email
-        p["tool"] = "scireg"
+        p["tool"] = "scirag"
     p.update(extra)
     return p
 
@@ -223,7 +223,7 @@ def _unpaywall_pdf_url(doi: str) -> str:
     """Return the best open-access PDF URL for a DOI via Unpaywall, or ''."""
     if not doi:
         return ""
-    email = os.getenv("NCBI_EMAIL", "scireg@example.com")
+    email = os.getenv("NCBI_EMAIL", "scirag@example.com")
     try:
         r = httpx.get(f"{UNPAYWALL}/{doi}", params={"email": email}, timeout=20)
         r.raise_for_status()
@@ -239,7 +239,7 @@ def _download_pdf_results(url: str) -> str:
         import tempfile
         from pathlib import Path
 
-        from scireg.sources.pdf import extract_results_section, extract_text_from_pdf
+        from scirag.sources.pdf import extract_results_section, extract_text_from_pdf
 
         r = httpx.get(url, timeout=60, follow_redirects=True)
         r.raise_for_status()
@@ -296,6 +296,6 @@ def enrich_with_fulltext(articles: list[Article]) -> None:
         warnings.warn(
             f"{len(missing)} article(s) have no retrievable full text "
             f"(PMIDs: {pmids_str}). "
-            "Use `scireg import-pdf` to add manually downloaded PDFs.",
+            "Use `scirag import-pdf` to add manually downloaded PDFs.",
             stacklevel=2,
         )

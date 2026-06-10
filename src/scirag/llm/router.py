@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import litellm
 
-from scireg.config import backend_for
+from scirag.config import backend_for
 
 # Let LiteLLM drop params a given provider doesn't support instead of erroring.
 litellm.drop_params = True

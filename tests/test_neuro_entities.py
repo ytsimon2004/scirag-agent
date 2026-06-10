@@ -1,4 +1,4 @@
-"""Tests for scireg.neuro.entities — LLM call is fully mocked."""
+"""Tests for scirag.neuro.entities — LLM call is fully mocked."""
 from __future__ import annotations
 
 import json
@@ -6,11 +6,11 @@ from unittest.mock import patch
 
 import pytest
 
-from scireg.neuro.entities import _ONTOLOGIES, expand_query, extract_entities
+from scirag.neuro.entities import _ONTOLOGIES, expand_query, extract_entities
 
 
 def _mock_complete(response: str):
-    return patch("scireg.neuro.entities.complete", return_value=response)
+    return patch("scirag.neuro.entities.complete", return_value=response)
 
 
 class TestExtractEntities:

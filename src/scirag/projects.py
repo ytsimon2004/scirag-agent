@@ -1,8 +1,10 @@
 """Project management — each project has its own isolated LanceDB index.
 
-Projects live under data/projects/<name>/lancedb.
-The active project is tracked in data/.active_project (plain text filename).
-No active project = use the default URI from pipeline.yaml.
+All data lives under ~/.scirag-agent/:
+  lancedb/                  — default global index
+  projects/<name>/lancedb/  — per-project indexes
+  projects.json             — project registry
+  .active_project           — name of the active project (plain text)
 """
 from __future__ import annotations
 
@@ -13,8 +15,7 @@ from typing import Optional
 
 
 def _data_dir() -> Path:
-    from scireg.config import ROOT
-    return ROOT / "data"
+    return Path.home() / ".scirag-agent"
 
 
 def _registry_path() -> Path:
@@ -43,12 +44,11 @@ def get_active_project() -> Optional[str]:
 
 
 def get_active_db_uri() -> str:
-    """Return the LanceDB URI for the active project, or the pipeline.yaml default."""
+    """Return the LanceDB URI for the active project, or the global default."""
     name = get_active_project()
     if name:
         return str(_data_dir() / "projects" / name / "lancedb")
-    from scireg.config import pipeline_cfg
-    return pipeline_cfg()["index"]["uri"]
+    return str(_data_dir() / "lancedb")
 
 
 # ---------------------------------------------------------------------------

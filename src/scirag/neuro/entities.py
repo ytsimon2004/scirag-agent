@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-from scireg.llm.router import complete
+from scirag.llm.router import complete
 
 # Wire these to real resolvers next:
 #   brain_region -> Allen Brain Atlas / NeuroNames / NIFSTD

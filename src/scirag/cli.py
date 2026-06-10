@@ -1,12 +1,12 @@
-"""scireg CLI — subcommands for scripting, or just `scireg` for the interactive shell.
+"""scirag CLI — subcommands for scripting, or just `scirag` for the interactive shell.
 
-    scireg                                        # interactive shell (default)
-    scireg search "grid cells entorhinal"         # raw PubMed, no LLM
-    scireg index  "hippocampal place cells" --retmax 30 --full-text
-    scireg retrieve "place cells remapping"
-    scireg ask    "How do place cells remap across environments?"
-    scireg import-pdf paper.pdf
-    scireg import-dir ./papers/
+    scirag                                        # interactive shell (default)
+    scirag search "grid cells entorhinal"         # raw PubMed, no LLM
+    scirag index  "hippocampal place cells" --retmax 30 --full-text
+    scirag retrieve "place cells remapping"
+    scirag ask    "How do place cells remap across environments?"
+    scirag import-pdf paper.pdf
+    scirag import-dir ./papers/
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ import typer
 from rich.console import Console
 from rich.markdown import Markdown
 
-from scireg.sources import pubmed
+from scirag.sources import pubmed
 
 app = typer.Typer(
     invoke_without_command=True,
@@ -34,7 +34,7 @@ console = Console()
 @app.callback()
 def _main(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is None:
-        from scireg.shell import run_shell
+        from scirag.shell import run_shell
         run_shell()
 
 
@@ -89,7 +89,7 @@ def print_retrieve_results(nodes) -> None:
 # ---------------------------------------------------------------------------
 
 def do_search(query: str, retmax: int = 15) -> None:
-    from scireg.sources.pubmed import _pmids_to_pmcids
+    from scirag.sources.pubmed import _pmids_to_pmcids
 
     arts = pubmed.search_and_fetch(query, retmax=retmax)
     if not arts:
@@ -117,8 +117,8 @@ def do_search(query: str, retmax: int = 15) -> None:
 
 def do_index(query: str, retmax: int = 25, full_text: bool = False) -> None:
     import questionary
-    from scireg.ingest.index import build_index, get_indexed_pmids
-    from scireg.sources.pubmed import _pmids_to_pmcids
+    from scirag.ingest.index import build_index, get_indexed_pmids
+    from scirag.sources.pubmed import _pmids_to_pmcids
 
     arts = pubmed.search_and_fetch(query, retmax=retmax)
     if not arts:
@@ -160,7 +160,7 @@ def do_index(query: str, retmax: int = 25, full_text: bool = False) -> None:
     console.print()
 
     if full_text:
-        from scireg.sources.pubmed import enrich_with_fulltext
+        from scirag.sources.pubmed import enrich_with_fulltext
         console.print("Fetching full text (Results section)...")
         with warnings.catch_warnings(record=True):
             warnings.simplefilter("always")
@@ -188,7 +188,7 @@ def do_index(query: str, retmax: int = 25, full_text: bool = False) -> None:
 
 
 def do_retrieve(query: str) -> None:
-    from scireg.retrieval.retriever import retrieve as _retrieve
+    from scirag.retrieval.retriever import retrieve as _retrieve
     print_retrieve_results(_retrieve(query))
 
 
@@ -198,7 +198,7 @@ _LLM_AGENTS = ("synthesizer", "critic", "neuro_entity", "planner", "retriever")
 def do_model(backend_key: str = "") -> None:
     """List available backends or switch all LLM agents to a new backend."""
     from rich.table import Table
-    from scireg.config import active_backend_key, models_cfg, set_agent_backend
+    from scirag.config import active_backend_key, models_cfg, set_agent_backend
 
     cfg = models_cfg()
     backends = cfg["backends"]
@@ -252,10 +252,10 @@ _llm_history: list[dict[str, str]] = []
 def do_llm(query: str, *, reset: bool = False) -> None:
     """RAG-grounded answer with visible sources and multi-turn conversation memory."""
     from rich.rule import Rule
-    from scireg.agents.synthesize import SYSTEM, _format_sources
-    from scireg.llm.router import complete
-    from scireg.neuro.entities import expand_query, extract_entities
-    from scireg.retrieval.retriever import retrieve
+    from scirag.agents.synthesize import SYSTEM, _format_sources
+    from scirag.llm.router import complete
+    from scirag.neuro.entities import expand_query, extract_entities
+    from scirag.retrieval.retriever import retrieve
 
     global _llm_history
     if reset:
@@ -314,8 +314,8 @@ def do_llm(query: str, *, reset: bool = False) -> None:
 
 
 def do_import_pdf(path: str) -> None:
-    from scireg.ingest.index import build_index
-    from scireg.sources.pdf import load_pdf_as_article
+    from scirag.ingest.index import build_index
+    from scirag.sources.pdf import load_pdf_as_article
 
     p = Path(path)
     if not p.exists():
@@ -333,8 +333,8 @@ def do_import_pdf(path: str) -> None:
 
 
 def do_import_dir(path: str) -> None:
-    from scireg.ingest.index import build_index
-    from scireg.sources.pdf import load_pdf_directory
+    from scirag.ingest.index import build_index
+    from scirag.sources.pdf import load_pdf_directory
 
     d = Path(path)
     if not d.is_dir():
@@ -354,7 +354,7 @@ def do_import_dir(path: str) -> None:
 
 
 def do_status() -> None:
-    from scireg.ingest.index import get_indexed_pmids
+    from scirag.ingest.index import get_indexed_pmids
     pmids = get_indexed_pmids()
     if pmids:
         console.print(f"Index: [cyan]{len(pmids)}[/] unique article(s) stored.")
@@ -364,7 +364,7 @@ def do_status() -> None:
 
 def do_clear_db(force: bool = False) -> None:
     import shutil
-    from scireg.projects import get_active_db_uri
+    from scirag.projects import get_active_db_uri
     uri = get_active_db_uri()
     db_path = Path(uri) if Path(uri).is_absolute() else Path.cwd() / uri
 
@@ -372,7 +372,7 @@ def do_clear_db(force: bool = False) -> None:
         console.print("[yellow]Index directory does not exist — nothing to clear.[/]")
         return
 
-    from scireg.ingest.index import get_indexed_pmids
+    from scirag.ingest.index import get_indexed_pmids
     n = len(get_indexed_pmids())
 
     if not force:
@@ -450,7 +450,7 @@ def delete_project_cmd(
 ):
     """Delete a project and its entire index (irreversible)."""
     import questionary
-    from scireg.projects import delete_project, get_active_project, list_projects
+    from scirag.projects import delete_project, get_active_project, list_projects
 
     if not any(p["name"] == name for p in list_projects()):
         console.print(f"[red]Project {name!r} not found.[/]")

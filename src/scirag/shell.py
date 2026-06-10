@@ -1,4 +1,4 @@
-"""Interactive scireg shell — launched by `scireg` with no arguments."""
+"""Interactive scirag shell — launched by `scirag` with no arguments."""
 from __future__ import annotations
 
 import shlex
@@ -28,33 +28,33 @@ _COMMANDS: dict[str, str] = {
     "/delete-project": "<name> [--force]                   — delete a project and its index",
     "/help":           "                                    — show this help",
     "/clear":          "                                    — clear the screen",
-    "/exit":           "                                    — exit scireg",
+    "/exit":           "                                    — exit scirag",
 }
 
 _COMPLETER = WordCompleter(list(_COMMANDS), sentence=True)
 
 
 def _prompt() -> HTML:
-    from scireg.projects import get_active_project
+    from scirag.projects import get_active_project
     project = get_active_project()
     if project:
         return HTML(
-            f"<ansigreen><b>scireg</b></ansigreen>"
+            f"<ansigreen><b>scirag</b></ansigreen>"
             f"<ansiwhite>[</ansiwhite><ansiyellow>{project}</ansiyellow><ansiwhite>]</ansiwhite>"
             f" <ansicyan>❯</ansicyan> "
         )
-    return HTML("<ansigreen><b>scireg</b></ansigreen> <ansicyan>❯</ansicyan> ")
+    return HTML("<ansigreen><b>scirag</b></ansigreen> <ansicyan>❯</ansicyan> ")
 
 
 def _banner() -> None:
     console.print()
-    console.print("[bold green]scireg[/] [dim]— multi-agent RAG for scientific literature[/]")
+    console.print("[bold green]scirag[/] [dim]— multi-agent RAG for scientific literature[/]")
     console.print("[dim]Type [/][cyan]/help[/][dim] for commands, [/][cyan]/exit[/][dim] to quit.[/]")
     console.print()
     # Show active project + index status
     try:
-        from scireg.ingest.index import get_indexed_pmids
-        from scireg.projects import get_active_project
+        from scirag.ingest.index import get_indexed_pmids
+        from scirag.projects import get_active_project
         project = get_active_project()
         pmids = get_indexed_pmids()
         label = f"project [cyan]{project}[/]" if project else "global index"
@@ -124,12 +124,12 @@ def _dispatch(line: str) -> None:
         return
 
     if cmd == "/status":
-        from scireg.cli import do_status
+        from scirag.cli import do_status
         do_status()
         return
 
     if cmd == "/clear-db":
-        from scireg.cli import do_clear_db
+        from scirag.cli import do_clear_db
         do_clear_db(force="force" in flags)
         return
 
@@ -138,7 +138,7 @@ def _dispatch(line: str) -> None:
             console.print("[yellow]Usage:[/] /delete-project <name> [--force]")
             return
         name = positional[0]
-        from scireg.projects import delete_project, get_active_project, list_projects
+        from scirag.projects import delete_project, get_active_project, list_projects
         if not any(p["name"] == name for p in list_projects()):
             console.print(f"[red]Project {name!r} not found.[/]")
             return
@@ -165,7 +165,7 @@ def _dispatch(line: str) -> None:
             return
         name = positional[0]
         desc = " ".join(positional[1:])
-        from scireg.projects import create_project, set_active_project
+        from scirag.projects import create_project, set_active_project
         try:
             create_project(name, desc)
             set_active_project(name)
@@ -175,7 +175,7 @@ def _dispatch(line: str) -> None:
         return
 
     if cmd == "/project":
-        from scireg.projects import (
+        from scirag.projects import (
             create_project, delete_project, get_active_project,
             list_projects, set_active_project,
         )
@@ -218,14 +218,14 @@ def _dispatch(line: str) -> None:
         if not query:
             console.print("[yellow]Usage:[/] /search <query> [--retmax N]")
             return
-        from scireg.cli import do_search
+        from scirag.cli import do_search
         do_search(query, retmax=int(flags.get("retmax", 15)))
 
     elif cmd == "/index":
         if not query:
             console.print("[yellow]Usage:[/] /index <query> [--retmax N] [--full-text]")
             return
-        from scireg.cli import do_index
+        from scirag.cli import do_index
         do_index(
             query,
             retmax=int(flags.get("retmax", 25)),
@@ -236,35 +236,35 @@ def _dispatch(line: str) -> None:
         if not query:
             console.print("[yellow]Usage:[/] /retrieve <query>")
             return
-        from scireg.cli import do_retrieve
+        from scirag.cli import do_retrieve
         do_retrieve(query)
 
     elif cmd == "/llm":
         if flags.get("reset"):
-            from scireg.cli import do_llm
+            from scirag.cli import do_llm
             do_llm("", reset=True)
         elif not query:
             console.print("[yellow]Usage:[/] /llm <question>  [dim](or /llm --reset to clear history)[/]")
         else:
-            from scireg.cli import do_llm
+            from scirag.cli import do_llm
             do_llm(query)
 
     elif cmd == "/model":
-        from scireg.cli import do_model
+        from scirag.cli import do_model
         do_model(query)
 
     elif cmd == "/import-pdf":
         if not query:
             console.print("[yellow]Usage:[/] /import-pdf <path>")
             return
-        from scireg.cli import do_import_pdf
+        from scirag.cli import do_import_pdf
         do_import_pdf(query)
 
     elif cmd == "/import-dir":
         if not query:
             console.print("[yellow]Usage:[/] /import-dir <path>")
             return
-        from scireg.cli import do_import_dir
+        from scirag.cli import do_import_dir
         do_import_dir(query)
 
     else:
@@ -273,7 +273,7 @@ def _dispatch(line: str) -> None:
 
 def run_shell() -> None:
     session: PromptSession = PromptSession(
-        history=FileHistory(str(Path.home() / ".scireg_history")),
+        history=FileHistory(str(Path.home() / ".scirag_history")),
         completer=_COMPLETER,
     )
 

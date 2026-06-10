@@ -15,9 +15,9 @@ from typing import Annotated, TypedDict
 from langgraph.graph import END, START, StateGraph
 from llama_index.core.schema import NodeWithScore
 
-from scireg.agents.synthesize import synthesize
-from scireg.neuro.entities import expand_query, extract_entities
-from scireg.retrieval.retriever import retrieve
+from scirag.agents.synthesize import synthesize
+from scirag.neuro.entities import expand_query, extract_entities
+from scirag.retrieval.retriever import retrieve
 
 
 class State(TypedDict, total=False):

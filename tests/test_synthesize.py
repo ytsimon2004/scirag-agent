@@ -1,11 +1,11 @@
-"""Tests for scireg.agents.synthesize — LLM call is mocked."""
+"""Tests for scirag.agents.synthesize — LLM call is mocked."""
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from scireg.agents.synthesize import _format_sources, synthesize
+from scirag.agents.synthesize import _format_sources, synthesize
 
 
 def _make_node(pmid: str, title: str, year: str, content: str) -> MagicMock:
@@ -46,7 +46,7 @@ class TestFormatSources:
 class TestSynthesize:
     def test_calls_complete_with_synthesizer_agent(self):
         node = _make_node("999", "Title", "2022", "Source text.")
-        with patch("scireg.agents.synthesize.complete", return_value="Cited answer [999].") as mock_complete:
+        with patch("scirag.agents.synthesize.complete", return_value="Cited answer [999].") as mock_complete:
             answer = synthesize("What are place cells?", [node])
         mock_complete.assert_called_once()
         assert mock_complete.call_args[0][0] == "synthesizer"
@@ -54,7 +54,7 @@ class TestSynthesize:
 
     def test_query_included_in_messages(self):
         node = _make_node("1", "T", "2020", "text")
-        with patch("scireg.agents.synthesize.complete", return_value="answer") as mock_complete:
+        with patch("scirag.agents.synthesize.complete", return_value="answer") as mock_complete:
             synthesize("How do grid cells work?", [node])
         messages = mock_complete.call_args[0][1]
         user_msg = next(m["content"] for m in messages if m["role"] == "user")
@@ -62,7 +62,7 @@ class TestSynthesize:
 
     def test_source_pmids_in_messages(self):
         nodes = [_make_node(str(i), f"T{i}", "2020", f"text {i}") for i in range(3)]
-        with patch("scireg.agents.synthesize.complete", return_value="answer") as mock_complete:
+        with patch("scirag.agents.synthesize.complete", return_value="answer") as mock_complete:
             synthesize("query", nodes)
         messages = mock_complete.call_args[0][1]
         user_msg = next(m["content"] for m in messages if m["role"] == "user")

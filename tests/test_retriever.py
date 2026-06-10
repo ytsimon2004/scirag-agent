@@ -1,11 +1,11 @@
-"""Tests for scireg.retrieval.retriever — index and pipeline config are mocked."""
+"""Tests for scirag.retrieval.retriever — index and pipeline config are mocked."""
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from scireg.retrieval.retriever import _rrf
+from scirag.retrieval.retriever import _rrf
 
 
 def _make_node(node_id: str, score: float = 1.0) -> MagicMock:
@@ -64,8 +64,8 @@ class TestRetrieve:
     def _cfg(self, hybrid: bool = False):
         return {"retrieval": {"top_k": 5, "bm25_k": 5, "final_k": 3, "hybrid": hybrid}}
 
-    @patch("scireg.retrieval.retriever.pipeline_cfg")
-    @patch("scireg.retrieval.retriever.load_index")
+    @patch("scirag.retrieval.retriever.pipeline_cfg")
+    @patch("scirag.retrieval.retriever.load_index")
     def test_dense_only(self, mock_load_index, mock_pipeline_cfg):
         mock_pipeline_cfg.return_value = self._cfg(hybrid=False)
         nodes = [_make_node(str(i)) for i in range(5)]
@@ -73,12 +73,12 @@ class TestRetrieve:
         mock_retriever.retrieve.return_value = nodes
         mock_load_index.return_value.as_retriever.return_value = mock_retriever
 
-        from scireg.retrieval.retriever import retrieve
+        from scirag.retrieval.retriever import retrieve
         result = retrieve("place cells")
         assert len(result) == 3  # final_k=3
 
-    @patch("scireg.retrieval.retriever.pipeline_cfg")
-    @patch("scireg.retrieval.retriever.load_index")
+    @patch("scirag.retrieval.retriever.pipeline_cfg")
+    @patch("scirag.retrieval.retriever.load_index")
     def test_hybrid_falls_back_when_bm25_unavailable(self, mock_load_index, mock_pipeline_cfg):
         mock_pipeline_cfg.return_value = self._cfg(hybrid=True)
         nodes = [_make_node(str(i)) for i in range(5)]
@@ -89,8 +89,8 @@ class TestRetrieve:
         # BM25Retriever import will fail in test env — retriever must degrade gracefully
         mock_load_index.return_value = index
 
-        from scireg.retrieval import retriever as ret_mod
+        from scirag.retrieval import retriever as ret_mod
         with patch.dict("sys.modules", {"llama_index.retrievers.bm25": None}):
-            from scireg.retrieval.retriever import retrieve
+            from scirag.retrieval.retriever import retrieve
             result = retrieve("grid cells")
         assert len(result) == 3
