@@ -47,17 +47,57 @@ def _prompt() -> HTML:
     return HTML("<ansigreen><b>scirag</b></ansigreen> <ansicyan>❯</ansicyan> ")
 
 
-_TAGLINE = "agent  ·  neuroscience RAG  ·  PubMed / PMC"
+def _ollama_status() -> str:
+    try:
+        import httpx
+        from scirag.config import models_cfg
+        base = models_cfg()["embeddings"]["api_base"]
+        httpx.get(f"{base}/api/tags", timeout=1.5).raise_for_status()
+        return "[green]running[/]"
+    except Exception:
+        return "[red]offline[/]"
 
 
 def _banner() -> None:
-    import pyfiglet
-    from rich.markup import escape
-    logo = pyfiglet.figlet_format("scirag", font="epic")
+    from pathlib import Path
+    from rich.padding import Padding
+    from scirag.config import active_backend_key, models_cfg
+    from scirag.ingest.index import get_indexed_pmids
+    from scirag.projects import get_active_db_uri, get_active_project
+
+    emb      = models_cfg()["embeddings"]["model"]
+    llm_key  = active_backend_key("synthesizer")
+    llm_model = models_cfg()["backends"][llm_key]["model"]
+    project  = get_active_project() or "[dim]none (global)[/]"
+    cwd      = Path.cwd()
+
+    try:
+        n_articles = len(get_indexed_pmids())
+        index_str = f"{n_articles} article(s)"
+    except Exception:
+        index_str = "empty"
+
+    ollama = _ollama_status()
+
+    width = 54
+    sep = "─" * (width - 2)
+
+    def row(label: str, value: str) -> str:
+        plain_label = f"  {label:<13}"
+        return f"│{plain_label} {value}"
+
     console.print()
-    for line in logo.splitlines():
-        console.print(f"[bold green]{escape(line)}[/]")
-    console.print(f"[dim]  {_TAGLINE}[/]")
+    console.print(f"╭{sep}╮")
+    console.print(f"│  [bold cyan]scirag-agent[/]  [dim]neuroscience RAG · PubMed/PMC[/]")
+    console.print(f"│{sep}│")
+    console.print(row("llm:",      f"[cyan]{llm_model}[/]  [dim]/model to change[/]"))
+    console.print(row("embedding:", f"[dim]{emb}[/]"))
+    console.print(row("ollama:",   ollama))
+    console.print(row("project:",  f"[yellow]{project}[/]" if get_active_project() else project))
+    console.print(row("index:",    f"[dim]{index_str}[/]"))
+    console.print(row("directory:", f"[dim]{cwd}[/]"))
+    console.print(f"╰{sep}╯")
+    console.print()
     console.print("[dim]  /help for commands  ·  /exit to quit[/]")
     console.print()
     # Show active project + index status
