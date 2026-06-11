@@ -10,31 +10,34 @@ from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.history import FileHistory
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 
 console = Console()
 
-_COMMANDS: dict[str, str] = {
-    "/search": "<query> [--retmax N]               — search PubMed, show full-text availability",
-    "/index": "<query> [--retmax N] [--full-text]  — interactive fetch + select + index",
-    "/retrieve": "<query>                             — query local index (no LLM)",
-    "/llm": "<question> [--reset]               — RAG answer with sources + conversation memory",
-    "/llm-ui": "[--port N]                          — open Chainlit web UI in browser",
-    "/model": "[backend-key]                       — list or switch LLM backend",
-    "/import-pdf": "<path>                              — index a single PDF (Results section only)",
-    "/import-dir": "<path>                              — index all PDFs in a directory",
-    "/env": "[set <KEY> <val> | unset <KEY>]     — manage API keys in ~/.scirag-agent/.env",
-    "/status": "                                    — show index statistics",
-    "/clear-db": "[--force]                           — delete the active index",
-    "/create-project": "<name> [description]               — create a new project and switch to it",
-    "/project": "[name|--default]                   — list projects or switch to one",
-    "/delete-project": "<name> [--force]                   — delete a project and its index",
-    "/help": "                                    — show this help",
-    "/clear": "                                    — clear the screen",
-    "/exit": "                                    — exit scirag",
-}
+# (command, args-hint, description)
+_COMMANDS: list[tuple[str, str, str]] = [
+    ("/search", "<query> [--retmax N]", "search PubMed, show full-text availability"),
+    ("/index", "<query> [--retmax N] [--full-text]", "interactive fetch + select + index"),
+    ("/retrieve", "<query>", "query local index (no LLM)"),
+    ("/llm", "<question> [--reset]", "RAG answer with sources + conversation memory"),
+    ("/llm-ui", "[--port N]", "open Chainlit web UI in browser"),
+    ("/model", "[backend-key]", "list or switch LLM backend"),
+    ("/import-pdf", "<path>", "index a single PDF (Results section only)"),
+    ("/import-dir", "<path>", "index all PDFs in a directory"),
+    ("/env", "[set <KEY> <val> | unset <KEY>]", "manage API keys in ~/.scirag-agent/.env"),
+    ("/status", "", "show index statistics"),
+    ("/remove", "[pmid ...]", "remove article(s) from the index (interactive if no args)"),
+    ("/clear-db", "[--force]", "delete the active index"),
+    ("/create-project", "<name> [description]", "create a new project and switch to it"),
+    ("/project", "[name|--default]", "list projects or switch to one"),
+    ("/delete-project", "<name> [--force]", "delete a project and its index"),
+    ("/help", "", "show this help"),
+    ("/clear", "", "clear the screen"),
+    ("/exit", "", "exit scirag"),
+]
 
-_COMPLETER = WordCompleter(list(_COMMANDS), sentence=True)
+_COMPLETER = WordCompleter([cmd for cmd, _, _ in _COMMANDS], sentence=True)
 
 
 def _prompt() -> HTML:
@@ -71,7 +74,7 @@ def _banner() -> None:
     emb = models_cfg()["embeddings"]["model"]
     llm_key = active_backend_key("synthesizer")
     llm_model = models_cfg()["backends"][llm_key]["model"]
-    project = get_active_project() or "[dim]none (global)[/]"
+    project = get_active_project() or "none (global)"
     cwd = Path.cwd()
 
     try:
@@ -82,35 +85,35 @@ def _banner() -> None:
 
     ollama = _ollama_status()
 
-    width = 54
-    sep = "─" * (width - 2)
-
-    def row(label: str, value: str) -> str:
-        plain_label = f"  {label:<13}"
-        return f"│{plain_label} {value}"
+    grid = Table.grid(padding=(0, 2))
+    grid.add_column(style="dim", no_wrap=True, min_width=11)
+    grid.add_column()
+    grid.add_row("llm", f"[cyan]{llm_model}[/]")
+    grid.add_row("embedding", f"[dim]{emb}[/]")
+    grid.add_row("ollama", ollama)
+    grid.add_row(
+        "project",
+        f"[yellow]{project}[/]" if get_active_project() else f"[dim]{project}[/]",
+    )
+    grid.add_row("index", f"[dim]{index_str}[/]")
+    grid.add_row("directory", f"[dim]{cwd}[/]")
 
     console.print()
-    console.print(f"╭{sep}╮")
-    console.print("│  [bold cyan]scirag-agent[/]  [dim]scientific RAG · PubMed/PMC[/]")
-    console.print(f"│{sep}│")
-    console.print(row("llm:", f"[cyan]{llm_model}[/]  [dim]/model to change[/]"))
-    console.print(row("embedding:", f"[dim]{emb}[/]"))
-    console.print(row("ollama:", ollama))
-    console.print(row("project:", f"[yellow]{project}[/]" if get_active_project() else project))
-    console.print(row("index:", f"[dim]{index_str}[/]"))
-    console.print(row("directory:", f"[dim]{cwd}[/]"))
-    console.print(f"╰{sep}╯")
-    console.print()
+    console.print(
+        Panel(
+            grid,
+            title="[bold cyan]scirag-agent[/]  [dim]scientific RAG · PubMed/PMC[/]",
+            border_style="dim",
+            padding=(0, 1),
+        )
+    )
     console.print("[dim]  /help for commands  ·  /exit to quit[/]")
     console.print()
-    # Show active project + index status
-    try:
-        from scirag.ingest.index import get_indexed_pmids
-        from scirag.projects import get_active_project
 
-        project = get_active_project()
+    try:
         pmids = get_indexed_pmids()
-        label = f"project [cyan]{project}[/]" if project else "global index"
+        active = get_active_project()
+        label = f"project [cyan]{active}[/]" if active else "global index"
         if pmids:
             console.print(f"[dim]  {label} — {len(pmids)} article(s) stored.[/]\n")
         else:
@@ -124,9 +127,10 @@ def _banner() -> None:
 def _handle_help() -> None:
     table = Table(box=None, padding=(0, 2), show_header=False)
     table.add_column(style="bold cyan", no_wrap=True)
+    table.add_column(style="white", no_wrap=True)
     table.add_column(style="dim")
-    for cmd, desc in _COMMANDS.items():
-        table.add_row(cmd, desc)
+    for cmd, args, desc in _COMMANDS:
+        table.add_row(cmd, args, f"— {desc}")
     console.print(table)
 
 
@@ -191,6 +195,12 @@ def _dispatch(line: str) -> None:
         from scirag.cli import do_status
 
         do_status()
+        return
+
+    if cmd == "/remove":
+        from scirag.cli import do_remove
+
+        do_remove(positional)
         return
 
     if cmd == "/clear-db":

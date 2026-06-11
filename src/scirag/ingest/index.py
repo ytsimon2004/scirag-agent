@@ -47,6 +47,11 @@ def build_index(articles: list[Article]) -> VectorStoreIndex:
 
 def get_indexed_pmids() -> set[str]:
     """Return PMIDs in the active project's index. Empty set if index doesn't exist."""
+    return {a["pmid"] for a in get_indexed_articles()}
+
+
+def get_indexed_articles() -> list[dict]:
+    """Return deduplicated article metadata (pmid, title, year) from the active index."""
     import lancedb
     from scirag.projects import get_active_db_uri
 
@@ -55,10 +60,33 @@ def get_indexed_pmids() -> set[str]:
         tbl = db.open_table(pipeline_cfg()["index"]["table"])
         arrow_tbl = tbl.to_lance().to_table(columns=["metadata"])
         metadata_col = arrow_tbl.column("metadata").combine_chunks()
-        pmids = metadata_col.field("pmid").to_pylist()
-        return {p for p in pmids if p}
+        seen: set[str] = set()
+        articles: list[dict] = []
+        for pmid, title, year in zip(
+            metadata_col.field("pmid").to_pylist(),
+            metadata_col.field("title").to_pylist(),
+            metadata_col.field("year").to_pylist(),
+        ):
+            if pmid and pmid not in seen:
+                seen.add(pmid)
+                articles.append({"pmid": pmid, "title": title or "", "year": year or ""})
+        return articles
     except Exception:
-        return set()
+        return []
+
+
+def remove_articles(pmids: list[str]) -> int:
+    """Delete all chunks for the given PMIDs. Returns count of PMIDs removed."""
+    import lancedb
+    from scirag.projects import get_active_db_uri
+
+    if not pmids:
+        return 0
+    db = lancedb.connect(get_active_db_uri())
+    tbl = db.open_table(pipeline_cfg()["index"]["table"])
+    ids = ", ".join(f"'{p}'" for p in pmids)
+    tbl.delete(f"metadata.pmid IN ({ids})")
+    return len(pmids)
 
 
 def load_index() -> VectorStoreIndex:

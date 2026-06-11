@@ -139,24 +139,40 @@ def do_index(query: str, retmax: int = 25, full_text: bool = False) -> None:
         __import__("time").sleep(0.4)
     pmc_map = _pmids_to_pmcids([a.pmid for a in arts])
 
-    console.print()
-    print_article_list(arts, existing, pmc_map)
-    console.print()
+    def _choice_title(a) -> list:
+        parts = []
+        if a.pmid in existing:
+            parts += [("fg:ansiyellow", "[indexed] ")]
+        parts += [
+            ("fg:ansicyan bold", a.pmid),
+            ("", f"  {a.title}  "),
+            ("fg:ansibrightblack", f"({a.year})"),
+        ]
+        tags = []
+        if a.pmid in pmc_map:
+            tags.append(("fg:ansigreen", "PMC✓"))
+        if a.doi:
+            tags.append(("fg:ansigreen", "DOI✓"))
+        for i, (style, tag) in enumerate(tags):
+            parts += [("", "  [" if i == 0 else ", "), (style, tag)]
+        if tags:
+            parts += [("", "]")]
+        parts += [("", "\n     "), ("fg:ansiblue", a.url)]
+        return parts
 
     choices = [
         questionary.Choice(
-            title=f"{'[indexed] ' if a.pmid in existing else ''}"
-            f"{a.pmid}  {a.title[:60]}  ({a.year})"
-            + (
-                f"  [{', '.join(t for t in (['PMC✓'] if a.pmid in pmc_map else []) + (['DOI✓'] if a.doi else []))}]"
-                if a.pmid in pmc_map or a.doi
-                else ""
-            ),
+            title=_choice_title(a),
             value=a,
             checked=(a.pmid not in existing),
         )
         for a in arts
     ]
+
+    import questionary.prompts.common as _qpc
+
+    _qpc.INDICATOR_SELECTED = "✔"
+    _qpc.INDICATOR_UNSELECTED = " "
 
     selected = questionary.checkbox(
         "Select articles to index  (space = toggle, a = all, i = invert, enter = confirm):",
@@ -511,13 +527,74 @@ def do_llm_ui(port: int = 8000) -> None:
 
 
 def do_status() -> None:
-    from scirag.ingest.index import get_indexed_pmids
+    from scirag.ingest.index import get_indexed_articles
 
-    pmids = get_indexed_pmids()
-    if pmids:
-        console.print(f"Index: [cyan]{len(pmids)}[/] unique article(s) stored.")
-    else:
+    articles = get_indexed_articles()
+    if not articles:
         console.print("[yellow]Index is empty.[/] Run [cyan]/index <query>[/] to populate it.")
+        return
+
+    console.print(f"Index: [cyan]{len(articles)}[/] unique article(s) stored.\n")
+    from rich.table import Table
+
+    table = Table(box=None, padding=(0, 1), show_header=True, header_style="bold dim")
+    table.add_column("PMID", style="cyan", no_wrap=True)
+    table.add_column("Year", style="dim", no_wrap=True)
+    table.add_column("Title")
+    for a in sorted(articles, key=lambda x: x["year"], reverse=True):
+        table.add_row(a["pmid"], a["year"], a["title"])
+    console.print(table)
+
+
+def do_remove(pmids: list[str]) -> None:
+    import questionary
+    from scirag.ingest.index import get_indexed_articles, remove_articles
+
+    articles = get_indexed_articles()
+    if not articles:
+        console.print("[yellow]Index is empty.[/]")
+        return
+
+    if pmids:
+        known = {a["pmid"] for a in articles}
+        bad = [p for p in pmids if p not in known]
+        if bad:
+            console.print(f"[red]Not found in index:[/] {', '.join(bad)}")
+            pmids = [p for p in pmids if p in known]
+        if not pmids:
+            return
+    else:
+        import questionary.prompts.common as _qpc
+
+        _qpc.INDICATOR_SELECTED = "✘"
+        _qpc.INDICATOR_UNSELECTED = " "
+
+        sorted_articles = sorted(articles, key=lambda x: x["year"], reverse=True)
+        choices = [
+            questionary.Choice(
+                title=[
+                    ("fg:ansicyan bold", a["pmid"]),
+                    ("", f"  {a['title']}  "),
+                    ("fg:ansibrightblack", f"({a['year']})"),
+                    ("", "\n     "),
+                    ("fg:ansiblue", f"https://pubmed.ncbi.nlm.nih.gov/{a['pmid']}/"),
+                ],
+                value=a["pmid"],
+            )
+            for a in sorted_articles
+        ]
+        selected = questionary.checkbox("Select articles to remove:", choices=choices).ask()
+        if not selected:
+            console.print("[dim]Cancelled.[/]")
+            return
+        pmids = selected
+
+    titles = {a["pmid"]: a["title"] for a in articles}
+    for p in pmids:
+        console.print(f"  [dim]removing[/] [cyan]{p}[/]  {titles.get(p, '')[:60]}")
+
+    remove_articles(pmids)
+    console.print(f"[green]Removed {len(pmids)} article(s) from the index.[/]")
 
 
 def do_clear_db(force: bool = False) -> None:
