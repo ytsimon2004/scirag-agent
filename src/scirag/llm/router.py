@@ -13,6 +13,19 @@ from scirag.config import backend_for
 litellm.drop_params = True
 
 
+def _flatten_messages(messages: list[dict[str, str]]) -> str:
+    """Flatten chat messages into a single prompt string for CLI backends."""
+    parts = []
+    for m in messages:
+        role = m["role"]
+        content = m["content"]
+        if role == "system":
+            parts.append(content)
+        else:
+            parts.append(f"{role.upper()}: {content}")
+    return "\n\n".join(parts)
+
+
 def _complete_claude_cli(messages: list[dict[str, str]]) -> str:
     """Call `claude -p` as a subprocess using the Claude Code CLI (Plus subscription)."""
     import shutil
@@ -23,19 +36,8 @@ def _complete_claude_cli(messages: list[dict[str, str]]) -> str:
             "`claude` CLI not found in PATH. Install Claude Code: https://claude.ai/code"
         )
 
-    # Flatten messages into a single prompt: system preamble + turns
-    parts = []
-    for m in messages:
-        role = m["role"]
-        content = m["content"]
-        if role == "system":
-            parts.append(content)
-        else:
-            parts.append(f"{role.upper()}: {content}")
-    prompt = "\n\n".join(parts)
-
     result = subprocess.run(
-        ["claude", "-p", prompt],
+        ["claude", "-p", _flatten_messages(messages)],
         capture_output=True,
         text=True,
         timeout=120,
@@ -50,6 +52,39 @@ def _complete_claude_cli(messages: list[dict[str, str]]) -> str:
     return result.stdout.strip()
 
 
+def _complete_codex_cli(messages: list[dict[str, str]]) -> str:
+    """Call `codex exec` as a subprocess using the OpenAI Codex CLI (OpenAI subscription)."""
+    import shutil
+    import subprocess
+    import tempfile
+
+    if not shutil.which("codex"):
+        raise RuntimeError(
+            "`codex` CLI not found in PATH. Install it: https://github.com/openai/codex"
+        )
+
+    with tempfile.NamedTemporaryFile(mode="r", suffix=".txt", delete=False) as tmp:
+        tmp_path = tmp.name
+
+    result = subprocess.run(
+        ["codex", "exec", "--output-last-message", tmp_path, _flatten_messages(messages)],
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+        if any(w in stderr.lower() for w in ("auth", "login", "unauthorized", "not logged")):
+            raise RuntimeError("Codex CLI is not authenticated. Run `codex login`, then retry.")
+        raise RuntimeError(f"`codex exec` failed: {stderr}")
+
+    import os
+
+    answer = open(tmp_path).read().strip()
+    os.unlink(tmp_path)
+    return answer
+
+
 def complete(
     agent: str,
     messages: list[dict[str, str]],
@@ -62,6 +97,8 @@ def complete(
 
     if backend["model"] == "claude-code":
         return _complete_claude_cli(messages)
+    if backend["model"] == "codex":
+        return _complete_codex_cli(messages)
 
     kwargs: dict = {
         "model": backend["model"],
@@ -86,8 +123,10 @@ async def complete_stream(
     backend = backend_for(agent)
 
     if backend["model"] == "claude-code":
-        # claude -p doesn't stream; yield the full response as one chunk
         yield _complete_claude_cli(messages)
+        return
+    if backend["model"] == "codex":
+        yield _complete_codex_cli(messages)
         return
 
     kwargs: dict = {

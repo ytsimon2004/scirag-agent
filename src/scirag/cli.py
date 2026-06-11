@@ -256,6 +256,8 @@ def do_model(backend_key: str = "") -> None:
         def _label(key: str, spec: dict) -> str:
             if spec["model"] == "claude-code":
                 needs = "  [claude CLI · Plus subscription]"
+            elif spec["model"] == "codex":
+                needs = "  [codex CLI · OpenAI subscription]"
             elif "anthropic" in spec["model"]:
                 needs = "  [ANTHROPIC_API_KEY]"
             elif "openai" in spec["model"]:
@@ -317,36 +319,48 @@ def do_llm(query: str, *, reset: bool = False) -> None:
         console.print(f"[dim]entities: {nonempty}[/]")
 
     nodes = retrieve(expanded)
-    if not nodes:
-        console.print(
-            "[yellow]Nothing retrieved — run [/][cyan]/index <query>[/][yellow] first.[/]"
-        )
-        return
 
-    # --- Show sources ---
-    console.print(Rule("[dim]Sources[/]", style="dim"))
-    for n in nodes:
-        md = n.node.metadata
-        url = md.get("url", "")
-        src = md.get("text_source", "")
-        src_tag = "[green]results[/]" if src == "results" else "[dim]abstract[/]"
-        pmid_str = f"[link={url}]{md.get('pmid', '?')}[/link]" if url else md.get("pmid", "?")
-        snippet = n.node.get_content()[:100].replace("\n", " ")
+    # --- Decide whether retrieved sources are relevant enough to use ---
+    _RAG_SCORE_THRESHOLD = 0.3
+    top_score = max((n.score or 0.0) for n in nodes) if nodes else 0.0
+    use_rag = nodes and top_score >= _RAG_SCORE_THRESHOLD
+
+    if use_rag:
+        # --- Show sources ---
+        console.print(Rule("[dim]Sources[/]", style="dim"))
+        for n in nodes:
+            md = n.node.metadata
+            url = md.get("url", "")
+            src = md.get("text_source", "")
+            src_tag = "[green]results[/]" if src == "results" else "[dim]abstract[/]"
+            pmid_str = f"[link={url}]{md.get('pmid', '?')}[/link]" if url else md.get("pmid", "?")
+            snippet = n.node.get_content()[:100].replace("\n", " ")
+            console.print(
+                f"  [bold cyan]{pmid_str}[/] {md.get('title', '')[:60]}  "
+                f"[dim]({md.get('year', 'n.d.')})[/]  {src_tag}"
+            )
+            console.print(f"  [dim]{snippet}…[/]")
+            if url:
+                console.print(f"  [dim][link={url}]{url}[/link][/]")
+    else:
         console.print(
-            f"  [bold cyan]{pmid_str}[/] {md.get('title', '')[:60]}  "
-            f"[dim]({md.get('year', 'n.d.')})[/]  {src_tag}"
+            f"[dim]No relevant sources (top score {top_score:.2f}) — answering from general knowledge.[/]"
         )
-        console.print(f"  [dim]{snippet}…[/]")
-        if url:
-            console.print(f"  [dim][link={url}]{url}[/link][/]")
+
     console.print(Rule("[dim]Answer[/]", style="dim"))
 
     # --- Build messages with history ---
-    sources_block = _format_sources(nodes)
-    user_content = (
-        f"Question: {query}\n\nSources:\n{sources_block}\n\nWrite a concise, cited answer."
-    )
-    messages = [{"role": "system", "content": SYSTEM}]
+    if use_rag:
+        sources_block = _format_sources(nodes)
+        user_content = (
+            f"Question: {query}\n\nSources:\n{sources_block}\n\nWrite a concise, cited answer."
+        )
+        system = SYSTEM
+    else:
+        user_content = query
+        system = "You are a helpful scientific assistant."
+
+    messages = [{"role": "system", "content": system}]
     messages.extend(_llm_history)
     messages.append({"role": "user", "content": user_content})
 

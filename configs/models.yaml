@@ -25,10 +25,12 @@ backends:
     model: "anthropic/claude-sonnet-4-6"   # needs ANTHROPIC_API_KEY
   claude-opus:
     model: "anthropic/claude-opus-4-8"
-  gpt:
-    model: "openai/gpt-4o"                  # needs OPENAI_API_KEY
   codex:
+    model: "codex"                         # uses `codex` subprocess (OpenAI subscription)
+  openai-o3:
     model: "openai/o3"                      # needs OPENAI_API_KEY
+  openai-gpt4o:
+    model: "openai/gpt-4o"                  # needs OPENAI_API_KEY
 
 # Embeddings run locally via Ollama (Mac) or point api_base at the 4060 box.
 embeddings:
