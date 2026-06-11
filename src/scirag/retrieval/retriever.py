@@ -38,10 +38,14 @@ def retrieve(query: str) -> list[NodeWithScore]:
         import warnings
         from llama_index.retrievers.bm25 import BM25Retriever
 
-        bm25 = BM25Retriever.from_defaults(docstore=index.docstore, similarity_top_k=cfg["bm25_k"])
         with warnings.catch_warnings():
+            # An empty docstore makes bm25s emit "Mean of empty slice" / divide
+            # warnings while building; suppress both build and query noise.
             warnings.filterwarnings("ignore", category=RuntimeWarning, module="bm25s")
             warnings.filterwarnings("ignore", category=RuntimeWarning, module="numpy")
+            bm25 = BM25Retriever.from_defaults(
+                docstore=index.docstore, similarity_top_k=cfg["bm25_k"]
+            )
             sparse = bm25.retrieve(query)
     except Exception:
         sparse = []  # BM25 optional; degrade to dense-only gracefully

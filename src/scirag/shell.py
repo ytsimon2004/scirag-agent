@@ -19,7 +19,8 @@ _COMMANDS: list[tuple[str, str, str]] = [
     ("/search", "<query> [--retmax N]", "search PubMed, show full-text availability"),
     ("/index", "<query> [--retmax N] [--full-text]", "interactive fetch + select + index"),
     ("/retrieve", "<query>", "query local index (no LLM)"),
-    ("/llm", "<question> [--reset]", "RAG answer with sources + conversation memory"),
+    ("/llm", "[<question>] [--reset]", "RAG answer; bare /llm = sticky conversation mode"),
+    ("/sources", "[on|off]", "expand last answer's sources, or set default (Ctrl+O toggles)"),
     ("/llm-ui", "[--port N]", "open Chainlit web UI in browser"),
     ("/model", "[backend-key]", "list or switch LLM backend"),
     ("/import-pdf", "<path>", "index a single PDF (Results section only)"),
@@ -50,6 +51,68 @@ def _prompt() -> HTML:
             f" <ansicyan>❯</ansicyan> "
         )
     return HTML("<ansigreen><b>scirag</b></ansigreen> <ansicyan>❯</ansicyan> ")
+
+
+def _chat_prompt() -> HTML:
+    from scirag.projects import get_active_project
+
+    project = get_active_project()
+    proj = (
+        f"<ansiwhite>[</ansiwhite><ansiyellow>{project}</ansiyellow><ansiwhite>]</ansiwhite>"
+        if project
+        else ""
+    )
+    return HTML(
+        f"<ansigreen><b>scirag</b></ansigreen>{proj} "
+        f"<ansimagenta><b>LLM mode</b></ansimagenta> <ansicyan>❯</ansicyan> "
+    )
+
+
+def _chat_mode(session: PromptSession) -> None:
+    """Sticky conversation window: every line typed is sent to /llm.
+
+    Conversation history is kept by do_llm across turns. Leave with /back
+    (returns to the command prompt) or /exit (quits scirag); /reset clears
+    the running conversation.
+    """
+    from scirag.cli import do_llm, do_sources
+
+    console.print(
+        "[dim]LLM mode — type questions directly.  "
+        "[/][cyan]/exit[/][dim] to return to the shell · [/][cyan]/reset[/][dim] to clear history · "
+        "[/][cyan]/sources[/][dim] to expand sources.[/]"
+    )
+    while True:
+        try:
+            line = session.prompt(_chat_prompt(), completer=None)
+        except KeyboardInterrupt:
+            console.print()
+            continue
+        except EOFError:
+            break
+
+        line = line.strip()
+        if not line:
+            continue
+        low = line.lower()
+        if low in ("/exit", "/quit", "/q", "/back", "/b"):
+            break  # leave LLM mode; /exit again at the shell quits scirag
+        if low in ("/reset", "reset"):
+            do_llm("", reset=True)
+            continue
+        if low == "/sources" or low.startswith("/sources "):
+            do_sources(line[len("/sources") :].strip())
+            continue
+        if line.startswith("/"):
+            # Keep LLM mode focused: foreign commands aren't run here.
+            console.print(
+                "[yellow]Not available in LLM mode.[/]  "
+                "Type [cyan]/exit[/] to return to the shell, then run the command."
+            )
+            continue
+        do_llm(line)
+
+    console.print("[dim]Left LLM mode.[/]")
 
 
 def _banner() -> None:
@@ -109,7 +172,7 @@ def _parse_flags(args: list[str]) -> tuple[list[str], dict]:
     return positional, flags
 
 
-def _dispatch(line: str) -> None:
+def _dispatch(line: str, session: PromptSession) -> None:
     try:
         parts = shlex.split(line)
     except ValueError as e:
@@ -282,13 +345,16 @@ def _dispatch(line: str) -> None:
 
             do_llm("", reset=True)
         elif not query:
-            console.print(
-                "[yellow]Usage:[/] /llm <question>  [dim](or /llm --reset to clear history)[/]"
-            )
+            _chat_mode(session)  # bare /llm → sticky conversation window
         else:
             from scirag.cli import do_llm
 
             do_llm(query)
+
+    elif cmd == "/sources":
+        from scirag.cli import do_sources
+
+        do_sources(query)
 
     elif cmd == "/llm-ui":
         from scirag.cli import do_llm_ui
@@ -321,10 +387,29 @@ def _dispatch(line: str) -> None:
         console.print(f"[yellow]Unknown command:[/] {cmd}   (type [cyan]/help[/])")
 
 
+def _build_key_bindings():
+    """Shell-wide key bindings. Ctrl+O toggles whether /llm shows source passages."""
+    from prompt_toolkit.application import run_in_terminal
+    from prompt_toolkit.key_binding import KeyBindings
+
+    kb = KeyBindings()
+
+    @kb.add("c-o")
+    def _toggle_sources(event) -> None:
+        from scirag.cli import toggle_show_sources
+
+        shown = toggle_show_sources()
+        state = "shown" if shown else "collapsed"
+        run_in_terminal(lambda: console.print(f"[dim]Sources {state} (Ctrl+O).[/]"))
+
+    return kb
+
+
 def run_shell() -> None:
     session: PromptSession = PromptSession(
         history=FileHistory(str(Path.home() / ".scirag_history")),
         completer=_COMPLETER,
+        key_bindings=_build_key_bindings(),
     )
 
     _banner()
@@ -348,7 +433,7 @@ def run_shell() -> None:
             break
 
         try:
-            _dispatch(line)
+            _dispatch(line, session)
         except SystemExit:
             console.print("[dim]Bye.[/]")
             break

@@ -295,15 +295,83 @@ def do_model(backend_key: str = "") -> None:
 
 # Conversation history for /llm — lives for the duration of the process.
 _llm_history: list[dict[str, str]] = []
+# Collapse source passages by default; toggle with /sources or Ctrl+O.
+_show_sources: bool = False
+# Nodes from the most recent grounded answer, kept for on-demand expansion.
+_last_sources: list = []
+
+
+def _render_sources(nodes) -> None:
+    """Print the full source-passage block (PMID, title, snippet, link)."""
+    from rich.rule import Rule
+
+    console.print(Rule("[dim]Sources[/]", style="dim"))
+    for n in nodes:
+        md = n.node.metadata
+        url = md.get("url", "")
+        src = md.get("text_source", "")
+        src_tag = "[green]results[/]" if src == "results" else "[dim]abstract[/]"
+        pmid_str = f"[link={url}]{md.get('pmid', '?')}[/link]" if url else md.get("pmid", "?")
+        snippet = n.node.get_content()[:100].replace("\n", " ")
+        console.print(
+            f"  [bold cyan]{pmid_str}[/] {md.get('title', '')[:60]}  "
+            f"[dim]({md.get('year', 'n.d.')})[/]  {src_tag}"
+        )
+        console.print(f"  [dim]{snippet}…[/]")
+        if url:
+            console.print(f"  [dim][link={url}]{url}[/link][/]")
+
+
+def _source_summary(nodes) -> str:
+    """One-line collapsed summary of the retrieved sources."""
+    pmids: list[str] = []
+    for n in nodes:
+        p = n.node.metadata.get("pmid", "?")
+        if p not in pmids:
+            pmids.append(p)
+    papers = "paper" if len(pmids) == 1 else "papers"
+    return (
+        f"[dim]▸ grounded on {len(nodes)} chunk(s) from {len(pmids)} {papers} "
+        f"({', '.join(pmids)}) — [/][cyan]/sources[/][dim] to expand · Ctrl+O to toggle[/]"
+    )
+
+
+def do_sources(arg: str = "") -> None:
+    """Show or toggle retrieved source passages.
+
+    `/sources` expands the last answer's sources once; `/sources on|off` sets
+    whether sources are shown automatically for every answer.
+    """
+    global _show_sources
+    a = arg.strip().lower()
+    if a in ("on", "show", "expand"):
+        _show_sources = True
+        console.print("[dim]Sources will now be shown for each answer.[/]")
+        return
+    if a in ("off", "hide", "collapse"):
+        _show_sources = False
+        console.print("[dim]Sources collapsed — [/][cyan]/sources[/][dim] to expand on demand.[/]")
+        return
+    if _last_sources:
+        _render_sources(_last_sources)
+    else:
+        console.print("[dim]No sources from the last answer.[/]")
+
+
+def toggle_show_sources() -> bool:
+    """Flip the default source visibility; returns the new state (used by Ctrl+O)."""
+    global _show_sources
+    _show_sources = not _show_sources
+    return _show_sources
 
 
 def do_llm(query: str, *, reset: bool = False) -> None:
-    """RAG-grounded answer with visible sources and multi-turn conversation memory."""
+    """RAG-grounded answer with collapsible sources and multi-turn conversation memory."""
     from rich.rule import Rule
     from scirag.agents.pipeline import prepare_answer
     from scirag.llm.router import complete
 
-    global _llm_history
+    global _llm_history, _last_sources
     if reset:
         _llm_history = []
         console.print("[dim]Conversation history cleared.[/]")
@@ -316,23 +384,13 @@ def do_llm(query: str, *, reset: bool = False) -> None:
         console.print(f"[dim]entities: {nonempty}[/]")
 
     if result.use_rag:
-        # --- Show sources ---
-        console.print(Rule("[dim]Sources[/]", style="dim"))
-        for n in result.nodes:
-            md = n.node.metadata
-            url = md.get("url", "")
-            src = md.get("text_source", "")
-            src_tag = "[green]results[/]" if src == "results" else "[dim]abstract[/]"
-            pmid_str = f"[link={url}]{md.get('pmid', '?')}[/link]" if url else md.get("pmid", "?")
-            snippet = n.node.get_content()[:100].replace("\n", " ")
-            console.print(
-                f"  [bold cyan]{pmid_str}[/] {md.get('title', '')[:60]}  "
-                f"[dim]({md.get('year', 'n.d.')})[/]  {src_tag}"
-            )
-            console.print(f"  [dim]{snippet}…[/]")
-            if url:
-                console.print(f"  [dim][link={url}]{url}[/link][/]")
+        _last_sources = result.nodes
+        if _show_sources:
+            _render_sources(result.nodes)
+        else:
+            console.print(_source_summary(result.nodes))
     else:
+        _last_sources = []
         console.print(
             f"[dim]No relevant sources (top score {result.top_score:.2f}) — answering from general knowledge.[/]"
         )
@@ -609,10 +667,24 @@ def do_status() -> None:
     table = Table(box=None, padding=(0, 1), show_header=True, header_style="bold dim")
     table.add_column("PMID", style="cyan", no_wrap=True)
     table.add_column("Year", style="dim", no_wrap=True)
+    table.add_column("Source", no_wrap=True)
     table.add_column("Title")
     for a in sorted(articles, key=lambda x: x["year"], reverse=True):
-        table.add_row(a["pmid"], a["year"], a["title"])
+        source = a.get("text_source", "")
+        source_cell = (
+            "[green]results[/]"
+            if source == "results"
+            else "[dim]abstract[/]"
+            if source == "abstract"
+            else "[dim]—[/]"
+        )
+        table.add_row(a["pmid"], a["year"], source_cell, a["title"])
     console.print(table)
+
+    n_results = sum(1 for a in articles if a.get("text_source") == "results")
+    console.print(
+        f"\n[dim]{n_results} with full-text results, {len(articles) - n_results} abstract-only.[/]"
+    )
 
 
 def do_remove(pmids: list[str]) -> None:
