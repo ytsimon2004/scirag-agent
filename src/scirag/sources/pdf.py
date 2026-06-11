@@ -13,7 +13,20 @@ from pathlib import Path
 
 import pypdf
 
+from scirag.sources import pubmed
 from scirag.sources.pubmed import Article
+
+# DOI anywhere in the extracted text (publisher PDFs print it on the first page).
+_DOI_RE = re.compile(r"10\.\d{4,9}/[-._;()/:A-Za-z0-9]+")
+
+# Years plausible as a publication date.
+_YEAR_RE = re.compile(r"\b(?:19|20)\d{2}\b")
+
+# Lines that are page furniture, not the paper's title.
+_TITLE_SKIP_RE = re.compile(
+    r"^(article|letter|review|open|www\.|https?://|doi[:\s]|received|accepted|published)\b",
+    re.IGNORECASE,
+)
 
 # Headings that start the Results section (and variants like "Results and Discussion")
 _RESULTS_RE = re.compile(
@@ -52,13 +65,56 @@ def _pmid_from_stem(stem: str) -> str:
     return stem if stem.isdigit() else f"pdf:{hashlib.md5(stem.encode()).hexdigest()[:8]}"
 
 
+def _extract_doi(text: str) -> str:
+    """Pull the first DOI out of the extracted text, or '' if none found."""
+    m = _DOI_RE.search(text)
+    if not m:
+        return ""
+    # Strip trailing sentence/line punctuation that the regex may have swallowed.
+    return m.group(0).rstrip(".,;)")
+
+
+def _extract_year(text: str) -> str:
+    """Best-effort publication year from the first page, or '' (offline fallback)."""
+    years = [int(y) for y in _YEAR_RE.findall(text[:3000])]
+    return str(max(years)) if years else ""
+
+
+def _guess_title(text: str) -> str:
+    """Pick the most title-like line, skipping page furniture (offline fallback)."""
+    for ln in text.splitlines():
+        s = ln.strip()
+        if len(s) < 15 or "://" in s or s.startswith("10."):
+            continue
+        if _TITLE_SKIP_RE.match(s):
+            continue
+        return s[:200]
+    return ""
+
+
+def _resolve_via_pubmed(doi: str) -> Article | None:
+    """Resolve a real PubMed record from a DOI, or None if unavailable/offline."""
+    try:
+        pmids = pubmed.search(f"{doi}[doi]", retmax=1)
+        if not pmids:
+            return None
+        arts = pubmed.fetch(pmids)
+        return arts[0] if arts else None
+    except Exception:
+        return None  # NCBI unreachable / offline — caller falls back to local extraction
+
+
 def load_pdf_as_article(path: Path) -> Article:
     """Load a single PDF as an Article.
 
-    - PMID: taken from filename if numeric (e.g. '12345678.pdf'), else a hash.
+    Metadata resolution, best to worst:
+    1. If a DOI is found in the text, look up the real PubMed record (correct
+       PMID, title, year, journal, MeSH) and graft the PDF's Results text onto it.
+    2. Otherwise fall back to local extraction: PMID from filename (or a hash),
+       year and title guessed from the text.
+
     - full_text: Results section only. Empty if no Results section detected.
-    - title: first non-empty line of the extracted text, capped at 200 chars.
-    - abstract: left empty (not available from a raw PDF).
+    - abstract: left empty for the local fallback (not reliably parseable).
     """
     text = extract_text_from_pdf(path)
     results = extract_results_section(text)
@@ -69,11 +125,28 @@ def load_pdf_as_article(path: Path) -> Article:
             stacklevel=2,
         )
 
-    title = next((ln.strip() for ln in text.splitlines() if ln.strip()), path.stem)
+    doi = _extract_doi(text)
+
+    if doi:
+        resolved = _resolve_via_pubmed(doi)
+        if resolved is not None:
+            resolved.full_text = results
+            return resolved
+        warnings.warn(
+            f"{path.name}: DOI {doi} found but no PubMed match (or offline) — "
+            "using metadata extracted from the PDF.",
+            stacklevel=2,
+        )
+
+    title = _guess_title(text) or next(
+        (ln.strip() for ln in text.splitlines() if ln.strip()), path.stem
+    )
     return Article(
         pmid=_pmid_from_stem(path.stem),
         title=title[:200],
         abstract="",
+        year=_extract_year(text),
+        doi=doi,
         full_text=results,
     )
 

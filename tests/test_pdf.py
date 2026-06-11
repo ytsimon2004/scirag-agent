@@ -7,11 +7,15 @@ from unittest.mock import MagicMock, patch
 
 
 from scirag.sources.pdf import (
+    _extract_doi,
+    _extract_year,
+    _guess_title,
     _pmid_from_stem,
     extract_results_section,
     load_pdf_as_article,
     load_pdf_directory,
 )
+from scirag.sources.pubmed import Article
 
 
 # ---------------------------------------------------------------------------
@@ -161,6 +165,104 @@ def test_load_pdf_abstract_is_empty(mock_reader_cls, tmp_path):
     pdf.touch()
     article = load_pdf_as_article(pdf)
     assert article.abstract == ""
+
+
+# ---------------------------------------------------------------------------
+# metadata extraction helpers
+# ---------------------------------------------------------------------------
+
+_PAPER_WITH_DOI = """
+Article https://doi.org/10.1038/s41467-026-70762-z
+Optogenetic inhibition of the retrosplenial cortex disrupts memory retrieval
+
+Results
+We found a clear effect.
+Discussion
+It matters.
+"""
+
+
+def test_extract_doi_found():
+    assert _extract_doi(_PAPER_WITH_DOI) == "10.1038/s41467-026-70762-z"
+
+
+def test_extract_doi_strips_trailing_punctuation():
+    assert _extract_doi("see 10.1234/abc.def).") == "10.1234/abc.def"
+
+
+def test_extract_doi_none():
+    assert _extract_doi(_FULL_PAPER) == ""
+
+
+def test_extract_year():
+    assert _extract_year("Published 2021 in Nature") == "2021"
+
+
+def test_extract_year_none():
+    assert _extract_year("no dates here") == ""
+
+
+def test_guess_title_skips_furniture():
+    title = _guess_title(_PAPER_WITH_DOI)
+    assert title.startswith("Optogenetic inhibition")
+
+
+# ---------------------------------------------------------------------------
+# load_pdf_as_article — DOI resolution path
+# ---------------------------------------------------------------------------
+
+
+@patch("scirag.sources.pdf.pubmed")
+@patch("scirag.sources.pdf.pypdf.PdfReader")
+def test_load_pdf_resolves_real_metadata_via_doi(mock_reader_cls, mock_pubmed, tmp_path):
+    mock_reader_cls.return_value = _make_pdf_reader(_PAPER_WITH_DOI)
+    real = Article(pmid="34592468", title="Real Title", abstract="", year="2021")
+    mock_pubmed.search.return_value = ["34592468"]
+    mock_pubmed.fetch.return_value = [real]
+
+    pdf = tmp_path / "205920be.pdf"
+    pdf.touch()
+    article = load_pdf_as_article(pdf)
+
+    mock_pubmed.search.assert_called_once_with("10.1038/s41467-026-70762-z[doi]", retmax=1)
+    assert article.pmid == "34592468"  # real PMID, not the pdf: hash
+    assert article.title == "Real Title"
+    assert article.year == "2021"
+    assert "clear effect" in article.full_text  # PDF Results grafted on
+
+
+@patch("scirag.sources.pdf.pubmed")
+@patch("scirag.sources.pdf.pypdf.PdfReader")
+def test_load_pdf_falls_back_when_doi_unresolved(mock_reader_cls, mock_pubmed, tmp_path):
+    mock_reader_cls.return_value = _make_pdf_reader(_PAPER_WITH_DOI)
+    mock_pubmed.search.return_value = []  # no PubMed match
+
+    pdf = tmp_path / "205920be.pdf"
+    pdf.touch()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        article = load_pdf_as_article(pdf)
+
+    assert article.pmid.startswith("pdf:")  # synthetic, from filename
+    assert article.doi == "10.1038/s41467-026-70762-z"  # still captured locally
+    assert article.title.startswith("Optogenetic inhibition")
+    assert any("no PubMed match" in str(w.message) for w in caught)
+
+
+@patch("scirag.sources.pdf.pubmed")
+@patch("scirag.sources.pdf.pypdf.PdfReader")
+def test_load_pdf_offline_falls_back(mock_reader_cls, mock_pubmed, tmp_path):
+    mock_reader_cls.return_value = _make_pdf_reader(_PAPER_WITH_DOI)
+    mock_pubmed.search.side_effect = RuntimeError("network down")
+
+    pdf = tmp_path / "205920be.pdf"
+    pdf.touch()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        article = load_pdf_as_article(pdf)
+
+    assert article.pmid.startswith("pdf:")
+    assert article.doi == "10.1038/s41467-026-70762-z"
 
 
 # ---------------------------------------------------------------------------
