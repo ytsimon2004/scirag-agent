@@ -5,8 +5,11 @@ from __future__ import annotations
 import shlex
 from pathlib import Path
 
+import os
+
 from prompt_toolkit import PromptSession
-from prompt_toolkit.completion import WordCompleter
+from prompt_toolkit.completion import Completer, PathCompleter, WordCompleter
+from prompt_toolkit.document import Document
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.history import FileHistory
 from rich.console import Console
@@ -37,7 +40,38 @@ _COMMANDS: list[tuple[str, str, str]] = [
     ("/exit", "", "exit scirag"),
 ]
 
-_COMPLETER = WordCompleter([cmd for cmd, _, _ in _COMMANDS], sentence=True)
+
+def _pdf_or_dir(path: str) -> bool:
+    """Show directories (to navigate) and PDF files for /import-pdf completion."""
+    return os.path.isdir(path) or path.lower().endswith(".pdf")
+
+
+class _ShellCompleter(Completer):
+    """Complete command names, and filesystem paths for the /import-* commands."""
+
+    def __init__(self) -> None:
+        self._commands = WordCompleter([cmd for cmd, _, _ in _COMMANDS], sentence=True)
+        self._pdf_paths = PathCompleter(expanduser=True, file_filter=_pdf_or_dir)
+        self._dir_paths = PathCompleter(expanduser=True, only_directories=True)
+        self._path_completers = {
+            "/import-pdf": self._pdf_paths,
+            "/import-dir": self._dir_paths,
+        }
+
+    def get_completions(self, document, complete_event):
+        text = document.text_before_cursor
+        stripped = text.lstrip()
+        for cmd, completer in self._path_completers.items():
+            prefix = cmd + " "
+            if stripped.startswith(prefix):
+                arg = stripped[len(prefix) :]
+                sub = Document(arg, cursor_position=len(arg))
+                yield from completer.get_completions(sub, complete_event)
+                return
+        yield from self._commands.get_completions(document, complete_event)
+
+
+_COMPLETER = _ShellCompleter()
 
 
 def _prompt() -> HTML:
@@ -387,8 +421,28 @@ def _dispatch(line: str, session: PromptSession) -> None:
         console.print(f"[yellow]Unknown command:[/] {cmd}   (type [cyan]/help[/])")
 
 
+def _import_dir_arg(text: str) -> str | None:
+    """If `text` is an /import-* command whose path argument is an existing
+    directory, return that expanded directory path; otherwise None."""
+    stripped = text.lstrip()
+    for cmd in ("/import-pdf", "/import-dir"):
+        prefix = cmd + " "
+        if stripped.startswith(prefix):
+            arg = stripped[len(prefix) :]
+            if not arg:
+                return None
+            expanded = os.path.expanduser(arg)
+            return expanded if os.path.isdir(expanded) else None
+    return None
+
+
 def _build_key_bindings():
-    """Shell-wide key bindings. Ctrl+O toggles whether /llm shows source passages."""
+    """Shell-wide key bindings.
+
+    - Ctrl+O toggles whether /llm shows source passages.
+    - Right arrow descends into a completed directory for the /import-* commands
+      (appends the separator and reopens completion); otherwise moves the cursor.
+    """
     from prompt_toolkit.application import run_in_terminal
     from prompt_toolkit.key_binding import KeyBindings
 
@@ -401,6 +455,16 @@ def _build_key_bindings():
         shown = toggle_show_sources()
         state = "shown" if shown else "collapsed"
         run_in_terminal(lambda: console.print(f"[dim]Sources {state} (Ctrl+O).[/]"))
+
+    @kb.add("right")
+    def _descend_or_move(event) -> None:
+        buf = event.current_buffer
+        if buf.document.is_cursor_at_the_end and _import_dir_arg(buf.text) is not None:
+            if not buf.text.endswith(os.sep):
+                buf.insert_text(os.sep)
+            buf.start_completion(select_first=False)
+            return
+        buf.cursor_right()
 
     return kb
 
