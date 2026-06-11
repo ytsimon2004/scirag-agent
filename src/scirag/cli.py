@@ -560,8 +560,69 @@ def do_llm_ui(port: int = 8000) -> None:
         console.print("\n[dim]Web UI stopped.[/]")
 
 
+def print_system_info() -> None:
+    """Print the system info panel (LLM, embedding, Ollama, project, index, directory)."""
+    from pathlib import Path
+
+    from rich.panel import Panel
+    from rich.table import Table
+
+    from scirag.config import active_backend_key, models_cfg
+    from scirag.ingest.index import get_indexed_pmids
+    from scirag.projects import get_active_project
+
+    emb = models_cfg()["embeddings"]["model"]
+    llm_key = active_backend_key("synthesizer")
+    llm_model = models_cfg()["backends"][llm_key]["model"]
+    project = get_active_project() or "none (global)"
+    cwd = Path.cwd()
+
+    try:
+        n_articles = len(get_indexed_pmids())
+        index_str = f"{n_articles} article(s)"
+    except Exception:
+        index_str = "empty"
+
+    # Ollama connectivity check
+    try:
+        import httpx
+
+        base = models_cfg()["embeddings"]["api_base"]
+        httpx.get(f"{base}/api/tags", timeout=1.5).raise_for_status()
+        ollama = "[green]running[/]"
+    except Exception:
+        ollama = "[red]offline[/]"
+
+    grid = Table.grid(padding=(0, 2))
+    grid.add_column(style="dim", no_wrap=True, min_width=11)
+    grid.add_column()
+    grid.add_row("llm", f"[cyan]{llm_model}[/]")
+    grid.add_row("embedding", f"[dim]{emb}[/]")
+    grid.add_row("ollama", ollama)
+    grid.add_row(
+        "project",
+        f"[yellow]{project}[/]" if get_active_project() else f"[dim]{project}[/]",
+    )
+    grid.add_row("index", f"[dim]{index_str}[/]")
+    grid.add_row("directory", f"[dim]{cwd}[/]")
+
+    console.print(
+        Panel(
+            grid,
+            title="[bold cyan]scirag-agent[/]  [dim]scientific RAG · PubMed/PMC[/]",
+            border_style="dim",
+            padding=(0, 1),
+        )
+    )
+
+
 def do_status() -> None:
+    from rich.table import Table
+
     from scirag.ingest.index import get_indexed_articles
+
+    print_system_info()
+    console.print()
 
     articles = get_indexed_articles()
     if not articles:
@@ -569,7 +630,6 @@ def do_status() -> None:
         return
 
     console.print(f"Index: [cyan]{len(articles)}[/] unique article(s) stored.\n")
-    from rich.table import Table
 
     table = Table(box=None, padding=(0, 1), show_header=True, header_style="bold dim")
     table.add_column("PMID", style="cyan", no_wrap=True)

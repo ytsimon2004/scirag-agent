@@ -10,7 +10,6 @@ from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.history import FileHistory
 from rich.console import Console
-from rich.panel import Panel
 from rich.table import Table
 
 console = Console()
@@ -53,60 +52,13 @@ def _prompt() -> HTML:
     return HTML("<ansigreen><b>scirag</b></ansigreen> <ansicyan>❯</ansicyan> ")
 
 
-def _ollama_status() -> str:
-    try:
-        import httpx
-        from scirag.config import models_cfg
-
-        base = models_cfg()["embeddings"]["api_base"]
-        httpx.get(f"{base}/api/tags", timeout=1.5).raise_for_status()
-        return "[green]running[/]"
-    except Exception:
-        return "[red]offline[/]"
-
-
 def _banner() -> None:
-    from pathlib import Path
-    from scirag.config import active_backend_key, models_cfg
+    from scirag.cli import print_system_info
     from scirag.ingest.index import get_indexed_pmids
     from scirag.projects import get_active_project
 
-    emb = models_cfg()["embeddings"]["model"]
-    llm_key = active_backend_key("synthesizer")
-    llm_model = models_cfg()["backends"][llm_key]["model"]
-    project = get_active_project() or "none (global)"
-    cwd = Path.cwd()
-
-    try:
-        n_articles = len(get_indexed_pmids())
-        index_str = f"{n_articles} article(s)"
-    except Exception:
-        index_str = "empty"
-
-    ollama = _ollama_status()
-
-    grid = Table.grid(padding=(0, 2))
-    grid.add_column(style="dim", no_wrap=True, min_width=11)
-    grid.add_column()
-    grid.add_row("llm", f"[cyan]{llm_model}[/]")
-    grid.add_row("embedding", f"[dim]{emb}[/]")
-    grid.add_row("ollama", ollama)
-    grid.add_row(
-        "project",
-        f"[yellow]{project}[/]" if get_active_project() else f"[dim]{project}[/]",
-    )
-    grid.add_row("index", f"[dim]{index_str}[/]")
-    grid.add_row("directory", f"[dim]{cwd}[/]")
-
     console.print()
-    console.print(
-        Panel(
-            grid,
-            title="[bold cyan]scirag-agent[/]  [dim]scientific RAG · PubMed/PMC[/]",
-            border_style="dim",
-            padding=(0, 1),
-        )
-    )
+    print_system_info()
     console.print("[dim]  /help for commands  ·  /exit to quit[/]")
     console.print()
 
