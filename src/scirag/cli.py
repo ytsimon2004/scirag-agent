@@ -46,6 +46,21 @@ def _main(ctx: typer.Context) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _patch_escape(question):
+    """Allow Escape to cancel a questionary prompt (returns None like Ctrl+C)."""
+    from prompt_toolkit.key_binding import KeyBindings, merge_key_bindings
+
+    extra = KeyBindings()
+
+    @extra.add("escape")
+    def _escape(event):
+        event.app.exit(result=None)
+
+    app = question.application
+    app.key_bindings = merge_key_bindings([app.key_bindings, extra]) if app.key_bindings else extra
+    return question
+
+
 def print_article_list(arts, existing: set, pmc_map: dict) -> None:
     for i, a in enumerate(arts, 1):
         in_db = a.pmid in existing
@@ -174,9 +189,11 @@ def do_index(query: str, retmax: int = 25, full_text: bool = False) -> None:
     _qpc.INDICATOR_SELECTED = "✔"
     _qpc.INDICATOR_UNSELECTED = " "
 
-    selected = questionary.checkbox(
-        "Select articles to index  (space = toggle, a = all, i = invert, enter = confirm):",
-        choices=choices,
+    selected = _patch_escape(
+        questionary.checkbox(
+            "Select articles to index  (space = toggle, a = all, i = invert, enter = confirm):",
+            choices=choices,
+        )
     ).ask()
 
     if not selected:
@@ -583,7 +600,9 @@ def do_remove(pmids: list[str]) -> None:
             )
             for a in sorted_articles
         ]
-        selected = questionary.checkbox("Select articles to remove:", choices=choices).ask()
+        selected = _patch_escape(
+            questionary.checkbox("Select articles to remove:", choices=choices)
+        ).ask()
         if not selected:
             console.print("[dim]Cancelled.[/]")
             return
