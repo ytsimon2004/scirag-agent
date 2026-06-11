@@ -19,12 +19,16 @@ backends:
   local-deepseek:
     model: "ollama/deepseek-r1:14b"
     api_base: "http://localhost:11434"
+  claude-code:
+    model: "claude-code"                   # uses `claude -p` subprocess (Plus subscription)
   claude-sonnet:
     model: "anthropic/claude-sonnet-4-6"   # needs ANTHROPIC_API_KEY
   claude-opus:
     model: "anthropic/claude-opus-4-8"
   gpt:
     model: "openai/gpt-4o"                  # needs OPENAI_API_KEY
+  codex:
+    model: "openai/o3"                      # needs OPENAI_API_KEY
 
 # Embeddings run locally via Ollama (Mac) or point api_base at the 4060 box.
 embeddings:

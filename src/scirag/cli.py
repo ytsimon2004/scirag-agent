@@ -254,11 +254,14 @@ def do_model(backend_key: str = "") -> None:
         import questionary
 
         def _label(key: str, spec: dict) -> str:
-            needs = ""
-            if "anthropic" in spec["model"]:
+            if spec["model"] == "claude-code":
+                needs = "  [claude CLI · Plus subscription]"
+            elif "anthropic" in spec["model"]:
                 needs = "  [ANTHROPIC_API_KEY]"
             elif "openai" in spec["model"]:
                 needs = "  [OPENAI_API_KEY]"
+            else:
+                needs = ""
             active = "  ← active" if key == current else ""
             return f"{key:<20} {spec['model']}{needs}{active}"
 
