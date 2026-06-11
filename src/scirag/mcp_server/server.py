@@ -33,13 +33,11 @@ def search_pubmed(query: str, retmax: int = 25) -> list[dict]:
 @mcp.tool()
 def ask_index(query: str) -> str:
     """Retrieve from the local index and return a cited answer."""
-    from scirag.agents.synthesize import synthesize
-    from scirag.neuro.entities import expand_query, extract_entities
-    from scirag.retrieval.retriever import retrieve
+    from scirag.agents.pipeline import prepare_answer
+    from scirag.llm.router import complete
 
-    ents = extract_entities(query)
-    nodes = retrieve(expand_query(query, ents))
-    return synthesize(query, nodes)
+    result = prepare_answer(query)
+    return complete("synthesizer", result.messages, max_tokens=1200)
 
 
 if __name__ == "__main__":

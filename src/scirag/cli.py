@@ -300,10 +300,8 @@ _llm_history: list[dict[str, str]] = []
 def do_llm(query: str, *, reset: bool = False) -> None:
     """RAG-grounded answer with visible sources and multi-turn conversation memory."""
     from rich.rule import Rule
-    from scirag.agents.synthesize import SYSTEM, _format_sources
+    from scirag.agents.pipeline import prepare_answer
     from scirag.llm.router import complete
-    from scirag.neuro.entities import expand_query, extract_entities
-    from scirag.retrieval.retriever import retrieve
 
     global _llm_history
     if reset:
@@ -311,24 +309,16 @@ def do_llm(query: str, *, reset: bool = False) -> None:
         console.print("[dim]Conversation history cleared.[/]")
         return
 
-    # --- Entity extraction + retrieval ---
-    ents = extract_entities(query)
-    expanded = expand_query(query, ents)
-    nonempty = {k: v for k, v in ents.items() if v}
+    result = prepare_answer(query, _llm_history)
+
+    nonempty = {k: v for k, v in result.entities.items() if v}
     if nonempty:
         console.print(f"[dim]entities: {nonempty}[/]")
 
-    nodes = retrieve(expanded)
-
-    # --- Decide whether retrieved sources are relevant enough to use ---
-    _RAG_SCORE_THRESHOLD = 0.3
-    top_score = max((n.score or 0.0) for n in nodes) if nodes else 0.0
-    use_rag = nodes and top_score >= _RAG_SCORE_THRESHOLD
-
-    if use_rag:
+    if result.use_rag:
         # --- Show sources ---
         console.print(Rule("[dim]Sources[/]", style="dim"))
-        for n in nodes:
+        for n in result.nodes:
             md = n.node.metadata
             url = md.get("url", "")
             src = md.get("text_source", "")
@@ -344,27 +334,12 @@ def do_llm(query: str, *, reset: bool = False) -> None:
                 console.print(f"  [dim][link={url}]{url}[/link][/]")
     else:
         console.print(
-            f"[dim]No relevant sources (top score {top_score:.2f}) — answering from general knowledge.[/]"
+            f"[dim]No relevant sources (top score {result.top_score:.2f}) — answering from general knowledge.[/]"
         )
 
     console.print(Rule("[dim]Answer[/]", style="dim"))
 
-    # --- Build messages with history ---
-    if use_rag:
-        sources_block = _format_sources(nodes)
-        user_content = (
-            f"Question: {query}\n\nSources:\n{sources_block}\n\nWrite a concise, cited answer."
-        )
-        system = SYSTEM
-    else:
-        user_content = query
-        system = "You are a helpful scientific assistant."
-
-    messages = [{"role": "system", "content": system}]
-    messages.extend(_llm_history)
-    messages.append({"role": "user", "content": user_content})
-
-    answer = complete("synthesizer", messages, max_tokens=1200)
+    answer = complete("synthesizer", result.messages, max_tokens=1200)
 
     # Persist turn in history (store the bare question, not the full sources block)
     _llm_history.append({"role": "user", "content": f"Question: {query}"})

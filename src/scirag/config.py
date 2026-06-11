@@ -27,12 +27,12 @@ def _load_yaml(path: str | Path) -> dict[str, Any]:
 
 @lru_cache(maxsize=1)
 def models_cfg() -> dict[str, Any]:
-    return _load_yaml(os.getenv("SCIREG_MODELS_CONFIG", "configs/models.yaml"))
+    return _load_yaml(os.getenv("SCIRAG_MODELS_CONFIG", "configs/models.yaml"))
 
 
 @lru_cache(maxsize=1)
 def pipeline_cfg() -> dict[str, Any]:
-    return _load_yaml(os.getenv("SCIREG_PIPELINE_CONFIG", "configs/pipeline.yaml"))
+    return _load_yaml(os.getenv("SCIRAG_PIPELINE_CONFIG", "configs/pipeline.yaml"))
 
 
 _runtime_backend: dict[str, str] = {}  # agent -> backend key, overrides models.yaml

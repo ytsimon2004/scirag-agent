@@ -9,24 +9,13 @@ from __future__ import annotations
 import chainlit as cl
 from chainlit.input_widget import Select
 
-from scirag.agents.synthesize import _format_sources
+from scirag.agents.pipeline import prepare_answer
 from scirag.config import active_backend_key, models_cfg, set_agent_backend
 from scirag.ingest.index import get_indexed_pmids
 from scirag.llm.router import complete_stream
-from scirag.neuro.entities import expand_query, extract_entities
 from scirag.projects import get_active_project
-from scirag.retrieval.retriever import retrieve
 
 _LLM_AGENTS = ("synthesizer", "critic", "neuro_entity", "planner", "retriever")
-
-_SYSTEM = (
-    "You are scirag-agent, a scientific literature assistant. "
-    "When the user asks a research question and relevant sources are provided, "
-    "answer from those sources and cite every claim with its [PMID] marker. "
-    "For general questions or conversation that isn't covered by the sources, "
-    "answer from your own knowledge without citations. "
-    "Be precise about methods, species, and brain regions when discussing science."
-)
 
 
 def _status_text() -> str:
@@ -95,21 +84,19 @@ async def on_message(message: cl.Message) -> None:
 
     history: list[dict] = cl.user_session.get("history", [])
 
-    # --- Retrieve (always attempt; empty index is fine) ---
+    # --- Entity extraction + retrieval + relevance gating (shared pipeline) ---
     async with cl.Step(name="Searching index", type="retrieval") as step:
-        ents = extract_entities(query)
-        expanded = expand_query(query, ents)
-        nonempty = {k: v for k, v in ents.items() if v}
+        result = prepare_answer(query, history)
+        nonempty = {k: v for k, v in result.entities.items() if v}
         if nonempty:
             step.output = f"Entities: {nonempty}"
-        nodes = retrieve(expanded) if get_indexed_pmids() else []
 
     # --- Show retrieved sources as an expanded step + sidebar elements ---
     seen: set[str] = set()
     elements: list[cl.Text] = []
     retrieve_lines: list[str] = []
 
-    for n in nodes:
+    for n in result.nodes:
         md = n.node.metadata
         pmid = md.get("pmid", "?")
         title = md.get("title", "")
@@ -145,23 +132,12 @@ async def on_message(message: cl.Message) -> None:
             content="**Retrieved sources**\n\n" + "\n\n".join(retrieve_lines),
         ).send()
 
-    # --- Build messages: include sources only when retrieval found something ---
-    if nodes:
-        sources_block = _format_sources(nodes)
-        user_content = f"Question: {query}\n\nSources:\n{sources_block}\n\nAnswer concisely, citing [PMID] markers where relevant."
-    else:
-        user_content = query
-
-    messages = [{"role": "system", "content": _SYSTEM}]
-    messages.extend(history)
-    messages.append({"role": "user", "content": user_content})
-
-    # --- Stream answer ---
+    # --- Stream answer (messages already assembled by the shared pipeline) ---
     answer_msg = cl.Message(content="", elements=elements)
     await answer_msg.send()
 
     answer = ""
-    async for token in complete_stream("synthesizer", messages, max_tokens=1200):
+    async for token in complete_stream("synthesizer", result.messages, max_tokens=1200):
         answer += token
         await answer_msg.stream_token(token)
     await answer_msg.update()

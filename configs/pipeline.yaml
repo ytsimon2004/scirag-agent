@@ -10,6 +10,7 @@ retrieval:
   bm25_k: 12         # sparse candidates
   final_k: 6         # passed to synthesizer after fusion
   hybrid: true       # dense + BM25 reciprocal-rank fusion
+  rag_score_threshold: 0.3   # min top score to ground the answer; below this, answer from general knowledge
 
 sources:
   pubmed:
