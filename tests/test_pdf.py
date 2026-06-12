@@ -276,6 +276,38 @@ def test_load_pdf_resolved_without_results_has_empty_fulltext(
     assert article.abstract == "From PubMed"  # but the record still has its abstract
 
 
+_REVIEW_PAPER = """
+Rethinking retrosplenial cortex
+
+Introduction
+The retrosplenial cortex is interesting.
+We review its many roles.
+
+Conclusion
+It does a lot.
+
+References
+1. Smith 2020.
+"""
+
+
+@patch("scirag.sources.pdf.pubmed")
+@patch("scirag.sources.pdf.pypdf.PdfReader")
+def test_load_pdf_review_uses_full_body(mock_reader_cls, mock_pubmed, tmp_path):
+    mock_reader_cls.return_value = _make_pdf_reader(_REVIEW_PAPER)
+    review = Article(pmid="36460006", title="Rethinking RSC", abstract="", pub_types=["Review"])
+    mock_pubmed.fetch.return_value = [review]
+
+    pdf = tmp_path / "36460006.pdf"  # numeric -> resolve via PMID
+    pdf.touch()
+    article = load_pdf_as_article(pdf)
+
+    assert article.full_text_kind == "review"
+    assert article.metadata()["text_source"] == "review"
+    assert "review its many roles" in article.full_text  # whole body indexed
+    assert "Smith 2020" not in article.full_text  # references trimmed
+
+
 @patch("scirag.sources.pdf.pubmed")
 @patch("scirag.sources.pdf.pypdf.PdfReader")
 def test_load_pdf_skips_and_warns_when_unresolved(mock_reader_cls, mock_pubmed, tmp_path):

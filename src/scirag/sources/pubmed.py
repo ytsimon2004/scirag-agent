@@ -46,10 +46,18 @@ class Article:
     pmc_id: str = ""
     doi: str = ""
     full_text: str = ""
+    pub_types: list[str] = field(default_factory=list)
+    # How to label full_text in metadata: "results" (Results section) or "review"
+    # (whole-body text of a review article, which has no Results section).
+    full_text_kind: str = "results"
 
     @property
     def url(self) -> str:
         return f"https://pubmed.ncbi.nlm.nih.gov/{self.pmid}/"
+
+    @property
+    def is_review(self) -> bool:
+        return any("review" in t.lower() for t in self.pub_types)
 
     def to_text(self) -> str:
         """Flatten to a single chunkable document. Uses full text when available.
@@ -75,7 +83,7 @@ class Article:
             "mesh": ", ".join(self.mesh_terms),
             "authors": ", ".join(self.authors),
             "first_author": self.authors[0] if self.authors else "",
-            "text_source": "results" if self.full_text else "abstract",
+            "text_source": self.full_text_kind if self.full_text else "abstract",
         }
 
 
@@ -142,6 +150,7 @@ def _parse_article(art: ET.Element) -> Article:
     mesh = [m.text for m in art.findall(".//MeshHeadingList/MeshHeading/DescriptorName") if m.text]
     year = text(".//PubDate/Year") or text(".//PubDate/MedlineDate")[:4]
     journal = text(".//Journal/Title")
+    pub_types = [t.text for t in art.findall(".//PublicationTypeList/PublicationType") if t.text]
 
     doi = ""
     for aid in art.findall(".//ArticleIdList/ArticleId"):
@@ -158,6 +167,7 @@ def _parse_article(art: ET.Element) -> Article:
         authors=authors,
         mesh_terms=mesh,
         doi=doi,
+        pub_types=pub_types,
     )
 
 

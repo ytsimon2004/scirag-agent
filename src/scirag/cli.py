@@ -85,6 +85,15 @@ def print_article_list(arts, existing: set, pmc_map: dict) -> None:
         console.print(f"     [dim][link={a.url}]{a.url}[/link][/]")
 
 
+def _source_tag(src: str) -> str:
+    """Rich markup for a chunk's text_source: results / review / abstract."""
+    return {
+        "results": "[green]results[/]",
+        "review": "[cyan]review[/]",
+        "abstract": "[dim]abstract[/]",
+    }.get(src, "[dim]—[/]")
+
+
 def print_retrieve_results(nodes) -> None:
     if not nodes:
         console.print("[yellow]No results — have you run /index yet?[/]")
@@ -95,7 +104,7 @@ def print_retrieve_results(nodes) -> None:
         url = md.get("url", "")
         pmid_display = f"[link={url}]{md.get('pmid', '?')}[/link]" if url else md.get("pmid", "?")
         src = md.get("text_source", "")
-        src_tag = "[green]results[/]" if src == "results" else "[dim]abstract[/]"
+        src_tag = _source_tag(src)
         console.print(
             f"[bold cyan]{pmid_display}[/] {md.get('title', '')} [dim]({md.get('year', 'n.d.')})[/]  {src_tag}"
         )
@@ -258,8 +267,7 @@ def do_show(pmid: str) -> None:
         )
         return
 
-    src = art["text_source"]
-    src_tag = "[green]results[/]" if src == "results" else "[dim]abstract[/]"
+    src_tag = _source_tag(art["text_source"])
     chunks = art["chunks"]
     console.print(
         f"[bold cyan]{art['pmid']}[/] {art['title']} [dim]({art['year'] or 'n.d.'})[/]  "
@@ -662,22 +670,13 @@ def do_status() -> None:
     table.add_column("Source", no_wrap=True)
     table.add_column("Title")
     for a in sorted(articles, key=lambda x: x["year"], reverse=True):
-        source = a.get("text_source", "")
-        source_cell = (
-            "[green]results[/]"
-            if source == "results"
-            else "[dim]abstract[/]"
-            if source == "abstract"
-            else "[dim]—[/]"
-        )
+        source_cell = _source_tag(a.get("text_source", ""))
         author = a.get("first_author") or "[dim]—[/]"
         table.add_row(a["pmid"], a["year"], author, source_cell, a["title"])
     console.print(table)
 
-    n_results = sum(1 for a in articles if a.get("text_source") == "results")
-    console.print(
-        f"\n[dim]{n_results} with full-text results, {len(articles) - n_results} abstract-only.[/]"
-    )
+    n_full = sum(1 for a in articles if a.get("text_source") in ("results", "review"))
+    console.print(f"\n[dim]{n_full} with full text, {len(articles) - n_full} abstract-only.[/]")
 
 
 def do_remove(pmids: list[str]) -> None:

@@ -88,6 +88,28 @@ def test_article_metadata_no_authors():
     assert md["first_author"] == ""
 
 
+def test_article_is_review():
+    assert Article(
+        pmid="1", title="T", abstract="A", pub_types=["Journal Article", "Review"]
+    ).is_review
+    assert not Article(pmid="1", title="T", abstract="A", pub_types=["Journal Article"]).is_review
+
+
+def test_article_text_source_label():
+    # Results section -> "results"; review whole-body -> "review"; neither -> "abstract".
+    assert (
+        Article(pmid="1", title="T", abstract="A", full_text="R").metadata()["text_source"]
+        == "results"
+    )
+    assert (
+        Article(
+            pmid="1", title="T", abstract="A", full_text="B", full_text_kind="review"
+        ).metadata()["text_source"]
+        == "review"
+    )
+    assert Article(pmid="1", title="T", abstract="A").metadata()["text_source"] == "abstract"
+
+
 def test_article_metadata_empty_mesh():
     a = Article(pmid="1", title="T", abstract="A")
     assert a.metadata()["mesh"] == ""
@@ -112,6 +134,10 @@ _ARTICLE_XML = """
         <Author><LastName>Moser</LastName><Initials>EI</Initials></Author>
       </AuthorList>
       <Journal><Title>Nature Neuroscience</Title></Journal>
+      <PublicationTypeList>
+        <PublicationType>Journal Article</PublicationType>
+        <PublicationType>Review</PublicationType>
+      </PublicationTypeList>
     </Article>
     <MeshHeadingList>
       <MeshHeading><DescriptorName>Hippocampus</DescriptorName></MeshHeading>
@@ -141,6 +167,8 @@ def test_parse_article_fields():
     assert "Hippocampus" in art.mesh_terms
     assert "Spatial Navigation" in art.mesh_terms
     assert art.doi == "10.1038/nn.9999"
+    assert "Review" in art.pub_types
+    assert art.is_review
 
 
 def test_parse_article_missing_fields():

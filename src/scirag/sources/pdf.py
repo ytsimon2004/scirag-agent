@@ -48,6 +48,9 @@ _RESULTS_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Back-matter heading (on its own line) marking where a review's body ends.
+_BACK_MATTER_RE = re.compile(r"(?im)^\s*(references|bibliography|acknowledgements?)\s*:?\s*$")
+
 # Headings that end the Results section
 _END_SECTION_RE = re.compile(
     rf"(?m)^\s*{_SECTION_NUM}(discussion|methods?|materials?\s*and\s*methods?|"
@@ -72,6 +75,12 @@ def extract_results_section(text: str) -> str:
     end_match = _END_SECTION_RE.search(text, start)
     end = end_match.start() if end_match else len(text)
     return text[start:end].strip()
+
+
+def _strip_back_matter(text: str) -> str:
+    """Drop the references/bibliography tail from a review's body text."""
+    matches = list(_BACK_MATTER_RE.finditer(text))
+    return text[: matches[-1].start()].strip() if matches else text.strip()
 
 
 def _extract_doi(text: str) -> str:
@@ -205,6 +214,12 @@ def load_pdf_as_article(path: Path) -> Article | None:
 
     if resolved is not None:
         resolved.full_text = results
+        # Reviews have no Results section — index the whole body instead.
+        if not results and resolved.is_review:
+            body = _strip_back_matter(text)
+            if body:
+                resolved.full_text = body
+                resolved.full_text_kind = "review"
         return resolved
 
     _warn_unresolved(path, doi, candidate_title)
