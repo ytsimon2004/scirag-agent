@@ -51,10 +51,11 @@ def get_indexed_pmids() -> set[str]:
 
 
 def get_indexed_articles() -> list[dict]:
-    """Return deduplicated article metadata (pmid, title, year, text_source).
+    """Return deduplicated article metadata (pmid, title, year, first_author, text_source).
 
     `text_source` is "results" when the chunk came from full-text Results, else
-    "abstract" — surfaced so callers can show what depth each paper was stored at.
+    "abstract". `first_author` may be "" for articles indexed before authors were
+    stored, or for PDF imports without resolved metadata.
     """
     import lancedb
     from scirag.projects import get_active_db_uri
@@ -65,18 +66,20 @@ def get_indexed_articles() -> list[dict]:
         arrow_tbl = tbl.to_lance().to_table(columns=["metadata"])
         metadata_col = arrow_tbl.column("metadata").combine_chunks()
         fields = {f.name for f in metadata_col.type}
-        sources = (
-            metadata_col.field("text_source").to_pylist()
-            if "text_source" in fields
-            else [""] * len(metadata_col)
-        )
+
+        def _col(name: str) -> list:
+            if name in fields:
+                return metadata_col.field(name).to_pylist()
+            return [""] * len(metadata_col)
+
         seen: set[str] = set()
         articles: list[dict] = []
-        for pmid, title, year, source in zip(
+        for pmid, title, year, first_author, source in zip(
             metadata_col.field("pmid").to_pylist(),
             metadata_col.field("title").to_pylist(),
             metadata_col.field("year").to_pylist(),
-            sources,
+            _col("first_author"),
+            _col("text_source"),
         ):
             if pmid and pmid not in seen:
                 seen.add(pmid)
@@ -85,6 +88,7 @@ def get_indexed_articles() -> list[dict]:
                         "pmid": pmid,
                         "title": title or "",
                         "year": year or "",
+                        "first_author": first_author or "",
                         "text_source": source or "",
                     }
                 )

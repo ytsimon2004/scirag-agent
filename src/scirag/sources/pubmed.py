@@ -52,9 +52,17 @@ class Article:
         return f"https://pubmed.ncbi.nlm.nih.gov/{self.pmid}/"
 
     def to_text(self) -> str:
-        """Flatten to a single chunkable document. Uses full text when available."""
+        """Flatten to a single chunkable document. Uses full text when available.
+
+        Authors are embedded in the text so author-name queries (e.g. "Powell")
+        are retrievable by both dense and BM25 search.
+        """
         body = self.full_text if self.full_text else self.abstract
-        return f"{self.title}\n\n{body}"
+        parts = [self.title]
+        if self.authors:
+            parts.append("Authors: " + ", ".join(self.authors))
+        parts.append(body)
+        return "\n\n".join(parts)
 
     def metadata(self) -> dict:
         return {
@@ -65,6 +73,8 @@ class Article:
             "url": self.url,
             "doi": self.doi,
             "mesh": ", ".join(self.mesh_terms),
+            "authors": ", ".join(self.authors),
+            "first_author": self.authors[0] if self.authors else "",
             "text_source": "results" if self.full_text else "abstract",
         }
 

@@ -620,6 +620,7 @@ def do_status() -> None:
     table = Table(box=None, padding=(0, 1), show_header=True, header_style="bold dim")
     table.add_column("PMID", style="cyan", no_wrap=True)
     table.add_column("Year", style="dim", no_wrap=True)
+    table.add_column("First author", no_wrap=True)
     table.add_column("Source", no_wrap=True)
     table.add_column("Title")
     for a in sorted(articles, key=lambda x: x["year"], reverse=True):
@@ -631,7 +632,8 @@ def do_status() -> None:
             if source == "abstract"
             else "[dim]—[/]"
         )
-        table.add_row(a["pmid"], a["year"], source_cell, a["title"])
+        author = a.get("first_author") or "[dim]—[/]"
+        table.add_row(a["pmid"], a["year"], author, source_cell, a["title"])
     console.print(table)
 
     n_results = sum(1 for a in articles if a.get("text_source") == "results")

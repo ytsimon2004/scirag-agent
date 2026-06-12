@@ -22,7 +22,11 @@ def _format_sources(nodes: list[NodeWithScore]) -> str:
         md = n.node.metadata
         pmid = md.get("pmid", "?")
         title = md.get("title", "")
-        blocks.append(f"[{pmid}] {title} ({md.get('year', 'n.d.')})\n{n.node.get_content()}")
+        header = f"[{pmid}] {title} ({md.get('year', 'n.d.')})"
+        authors = md.get("authors") or ""
+        if authors:
+            header += f" — {authors}"
+        blocks.append(f"{header}\n{n.node.get_content()}")
     return "\n\n---\n\n".join(blocks)
 
 

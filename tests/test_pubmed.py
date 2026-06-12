@@ -46,6 +46,11 @@ def test_article_to_text_falls_back_when_full_text_empty():
     assert a.to_text() == "Title\n\nAbstract text"
 
 
+def test_article_to_text_includes_authors():
+    a = Article(pmid="1", title="Title", abstract="Body", authors=["Powell K", "Smith J"])
+    assert a.to_text() == "Title\n\nAuthors: Powell K, Smith J\n\nBody"
+
+
 def test_article_metadata_keys():
     a = Article(
         pmid="1",
@@ -55,11 +60,32 @@ def test_article_metadata_keys():
         year="2024",
         doi="10.1038/s41586-000",
         mesh_terms=["memory", "hippocampus"],
+        authors=["Powell K", "Smith J"],
     )
     md = a.metadata()
-    assert set(md) == {"pmid", "title", "journal", "year", "url", "doi", "mesh", "text_source"}
+    assert set(md) == {
+        "pmid",
+        "title",
+        "journal",
+        "year",
+        "url",
+        "doi",
+        "mesh",
+        "authors",
+        "first_author",
+        "text_source",
+    }
     assert md["mesh"] == "memory, hippocampus"
     assert md["doi"] == "10.1038/s41586-000"
+    assert md["authors"] == "Powell K, Smith J"
+    assert md["first_author"] == "Powell K"
+
+
+def test_article_metadata_no_authors():
+    a = Article(pmid="1", title="T", abstract="A")
+    md = a.metadata()
+    assert md["authors"] == ""
+    assert md["first_author"] == ""
 
 
 def test_article_metadata_empty_mesh():
