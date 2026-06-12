@@ -97,6 +97,46 @@ def get_indexed_articles() -> list[dict]:
         return []
 
 
+def get_article_chunks(pmid: str) -> dict | None:
+    """Return the stored chunks + metadata for a single PMID, or None if absent.
+
+    Shape: {pmid, title, year, first_author, authors, text_source, chunks: [text,…]}.
+    This is the embedded text (abstract or Results section) as indexed.
+    """
+    import lancedb
+    from scirag.projects import get_active_db_uri
+
+    try:
+        db = lancedb.connect(get_active_db_uri())
+        tbl = db.open_table(pipeline_cfg()["index"]["table"])
+        safe = pmid.replace("'", "''")
+        arrow = tbl.to_lance().to_table(
+            columns=["text", "metadata"], filter=f"metadata.pmid = '{safe}'"
+        )
+    except Exception:
+        return None
+
+    if arrow.num_rows == 0:
+        return None
+
+    chunks = arrow.column("text").to_pylist()
+    meta = arrow.column("metadata").combine_chunks()
+    fields = {f.name for f in meta.type}
+
+    def first(name: str) -> str:
+        return (meta.field(name).to_pylist()[0] or "") if name in fields else ""
+
+    return {
+        "pmid": pmid,
+        "title": first("title"),
+        "year": first("year"),
+        "first_author": first("first_author"),
+        "authors": first("authors"),
+        "text_source": first("text_source"),
+        "chunks": chunks,
+    }
+
+
 def remove_articles(pmids: list[str]) -> int:
     """Delete all chunks for the given PMIDs. Returns count of PMIDs removed."""
     import lancedb

@@ -22,6 +22,7 @@ _COMMANDS: list[tuple[str, str, str]] = [
     ("/search", "<query> [--retmax N]", "search PubMed, show full-text availability"),
     ("/index", "<query> [--retmax N] [--full-text]", "interactive fetch + select + index"),
     ("/retrieve", "<query>", "query local index (no LLM)"),
+    ("/show", "<pmid>", "print a paper's stored abstract/results text"),
     ("/llm", "[<question>] [--reset]", "RAG answer; bare /llm = sticky conversation mode"),
     ("/llm-ui", "[--port N]", "open Chainlit web UI in browser (click-to-expand sources)"),
     ("/model", "[backend-key]", "list or switch LLM backend"),
@@ -367,6 +368,14 @@ def _dispatch(line: str, session: PromptSession) -> None:
         from scirag.cli import do_retrieve
 
         do_retrieve(query)
+
+    elif cmd == "/show":
+        if not query:
+            console.print("[yellow]Usage:[/] /show <pmid>")
+            return
+        from scirag.cli import do_show
+
+        do_show(query)
 
     elif cmd == "/llm":
         if flags.get("reset"):

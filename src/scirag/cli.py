@@ -239,6 +239,39 @@ def do_retrieve(query: str) -> None:
     print_retrieve_results(_retrieve(query))
 
 
+def do_show(pmid: str) -> None:
+    """Print the stored embedded text (abstract or Results) for one indexed PMID."""
+    from rich.rule import Rule
+
+    from scirag.ingest.index import get_article_chunks
+
+    pmid = pmid.strip()
+    if not pmid:
+        console.print("[yellow]Usage:[/] /show <pmid>")
+        return
+
+    art = get_article_chunks(pmid)
+    if not art:
+        console.print(
+            f"[yellow]No indexed article with PMID[/] [cyan]{pmid}[/]. "
+            "Run [cyan]/status[/] to list stored PMIDs."
+        )
+        return
+
+    src = art["text_source"]
+    src_tag = "[green]results[/]" if src == "results" else "[dim]abstract[/]"
+    chunks = art["chunks"]
+    console.print(
+        f"[bold cyan]{art['pmid']}[/] {art['title']} [dim]({art['year'] or 'n.d.'})[/]  "
+        f"{src_tag} · {len(chunks)} chunk(s)"
+    )
+    if art["authors"]:
+        console.print(f"  [dim]{art['authors']}[/]")
+    for i, text in enumerate(chunks, 1):
+        console.print(Rule(f"[dim]chunk {i}/{len(chunks)}[/]", style="dim"))
+        console.print(text)
+
+
 _LLM_AGENTS = ("synthesizer", "critic", "neuro_entity", "planner", "retriever")
 
 
@@ -750,6 +783,12 @@ def index(query: str, retmax: int = 25, full_text: bool = False):
 def retrieve(query: str):
     """Query the local index and show retrieved chunks (no LLM)."""
     do_retrieve(query)
+
+
+@app.command()
+def show(pmid: str):
+    """Print a paper's stored abstract/results text by PMID."""
+    do_show(pmid)
 
 
 @app.command()
