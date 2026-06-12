@@ -1,11 +1,19 @@
 # scirag-agent
 
-Scientific RAG · PubMed/PMC — interactive shell for literature retrieval,
-indexing, and LLM-grounded Q&A.
+Scientific RAG over PubMed/PMC — an interactive shell for retrieving, indexing,
+and asking grounded, cited questions about the literature (neuroscience-focused).
 
-Built with **LlamaIndex** (indexing/retrieval), **LangGraph** (orchestration),
-and **LiteLLM** (LLM router). Runs fully local via Ollama or with frontier
-models (Claude/OpenAI) — swappable per agent in `configs/models.yaml`.
+Built with **LlamaIndex** (chunking, embeddings, LanceDB vector store, hybrid
+dense + BM25 retrieval) and **LiteLLM** (one router across local and frontier
+LLMs). Runs fully local via Ollama, or with frontier models (Claude / OpenAI) —
+selectable per agent in `configs/models.yaml`.
+
+Two principles shape the index:
+
+- **Every answer is grounded and cited** with `[PMID]` markers from the sources.
+- **Nothing is indexed that can't be resolved to a real PubMed record** — imported
+  PDFs are matched to PubMed (by PMID / DOI / title) or skipped, so the index
+  never holds guessed metadata.
 
 ---
 
@@ -16,178 +24,190 @@ git clone <repo> && cd scireg
 uv sync
 ```
 
-### Local models (Ollama)
+**Embeddings (always required) — Ollama.** Indexing and retrieval use a local
+embedding model, so Ollama must be running with `bge-m3` whichever LLM you choose:
 
 ```
 ollama serve
-ollama pull qwen2.5:14b-instruct-q4_K_M   # LLM (~9 GB)
 ollama pull bge-m3                         # embeddings (~1.2 GB)
 ```
 
-### Web UI (optional)
+**LLM — pick one:**
+
+- **Local (default), via Ollama** — no API key:
+  ```
+  ollama pull qwen2.5:14b-instruct-q4_K_M  # ~9 GB
+  ```
+- **`claude-code` / `codex`** — reuse your existing Claude Code or OpenAI Codex
+  CLI login (no API key, no model download); select with `/model claude-code`.
+- **Frontier API** — Claude / OpenAI via `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`
+  (see [API keys](#api-keys-only-for-frontier-backends)).
+
+So the qwen download is optional — only needed if you want a local LLM.
+
+Web UI (optional): `uv sync --extra ui`
+
+---
+
+## Getting started
+
+Run `scirag` with no arguments to open the interactive shell. A first session
+usually goes: **create a project → pick a model → index → ask**.
+
+### 1 — Create a project
+
+Projects keep a separate index per topic (stored under `~/.scirag-agent/projects/`).
+Working without one uses a shared global index.
 
 ```
-uv sync --extra ui
+scirag ❯ /create-project rsc "Retrosplenial cortex circuits"
 ```
 
-### API keys (optional — needed only for frontier backends)
+The prompt now shows the active project: `scirag[rsc] ❯`.
 
 ```
-scirag
-scirag ❯ /env set NCBI_API_KEY    <key>     # raises PubMed rate limit to 10 req/s
-scirag ❯ /env set ANTHROPIC_API_KEY <key>   # for claude-sonnet / claude-opus
-scirag ❯ /env set OPENAI_API_KEY  <key>     # for gpt-4o
+scirag[rsc] ❯ /project              # list projects
+scirag[rsc] ❯ /project place-cells  # switch
+scirag[rsc] ❯ /project --default    # back to the global index
+scirag[rsc] ❯ /delete-project rsc   # delete (asks to confirm)
+```
+
+### 2 — Choose a model
+
+The default is local **Qwen2.5-14B** via Ollama — no API key needed.
+
+```
+scirag[rsc] ❯ /model                 # list backends, mark the active one
+scirag[rsc] ❯ /model claude-sonnet   # switch (or use arrow keys with bare /model)
+```
+
+| Key | Model | Needs |
+|---|---|---|
+| `local-qwen14b` | `ollama/qwen2.5:14b-instruct-q4_K_M` | — (default) |
+| `local-llama8b` | `ollama/llama3.1:8b-instruct-q4_K_M` | — |
+| `local-deepseek` | `ollama/deepseek-r1:14b` | — |
+| `claude-sonnet` / `claude-opus` | `anthropic/claude-sonnet-4-6` / `-opus-4-8` | `ANTHROPIC_API_KEY` |
+| `openai-gpt4o` / `openai-o3` | `openai/gpt-4o` / `openai/o3` | `OPENAI_API_KEY` |
+| `claude-code` / `codex` | local `claude -p` / `codex` CLI subprocess | that CLI installed + signed in |
+
+Switching applies to the current session only — `configs/models.yaml` is never modified.
+
+### API keys (only for frontier backends)
+
+```
+scirag[rsc] ❯ /env set NCBI_API_KEY      <key>   # raises PubMed rate limit to 10 req/s
+scirag[rsc] ❯ /env set ANTHROPIC_API_KEY <key>   # claude-* backends
+scirag[rsc] ❯ /env set OPENAI_API_KEY    <key>   # openai-* backends
 ```
 
 Keys are stored in `~/.scirag-agent/.env` — never in the repo.
 
 ---
 
-## Interactive shell
-
-```
-scirag
-```
-
-```
-╭──────────────────────────────────────────────────────╮
-│  scirag-agent  scientific RAG · PubMed/PMC           │
-│──────────────────────────────────────────────────────│
-│  llm:          ollama/qwen2.5:14b-instruct-q4_K_M    │
-│  embedding:    bge-m3                                │
-│  ollama:       running                               │
-│  project:      none (global)                         │
-│  index:        0 article(s)                          │
-│  directory:    ~/code/scireg                         │
-╰──────────────────────────────────────────────────────╯
-
-scirag ❯
-```
-
----
-
 ## Core workflow
 
-### 1 — Search PubMed (no index needed)
+**index → status → show → llm.**
+
+### 1 — Index papers
 
 ```
-scirag ❯ /search "anterior posterior retrosplenial cortex" --retmax 10
+scirag[rsc] ❯ /index "anterior posterior retrosplenial cortex" --retmax 10 --full-text
 ```
 
-Shows each result with availability badges:
-- `PMC✓` — full Results-section text retrievable
-- `DOI✓` — Unpaywall can find a free PDF
-- `ABS✓` — abstract available as fallback
+Fetches matching PubMed articles, shows a checkbox list with availability badges
+and clickable URLs, then embeds the papers you select. With `--full-text` each
+selected paper is enriched to its deepest available text:
 
-### 2 — Index papers interactively
+- **research articles** → the **Results section** (PMC, else an open-access PDF),
+- **review articles** → the **whole body** (reviews have no Results section),
+- otherwise → the **abstract**.
 
-```
-scirag ❯ /index "anterior posterior retrosplenial cortex" --retmax 10 --full-text
-```
-
-Fetches articles, shows a numbered list with status and clickable URLs, then
-opens a checkbox prompt — select which papers to embed and store.
-
-`--full-text` enriches each selected article through:
+### 2 — Check what's stored
 
 ```
-PMC full text (Results section only)
-  → Unpaywall PDF (Results section only)
-    → abstract fallback
-      → warning + URL for manual download
+scirag[rsc] ❯ /status
 ```
 
-Manual PDF import when automatic retrieval fails:
-
 ```
-scirag ❯ /import-pdf ~/Downloads/41881980.pdf
-scirag ❯ /import-dir ~/Downloads/papers/
-```
-
-### 3 — Retrieve (no LLM)
-
-```
-scirag ❯ /retrieve "visuospatial coding retrosplenial"
+ PMID      Year  First author  Source    Title
+ 32147692  2020  Powell A      results   Stable Encoding of Visual Cues in the Mouse Retrosplenial Cortex.
+ 36460006  2023  Alexander AS  review    Rethinking retrosplenial cortex: Perspectives and predictions.
+ 9270578   1997  Takahashi N   abstract  Pure topographic disorientation due to right retrosplenial lesion.
 ```
 
-Shows matching chunks with PMID, title, year, `results`/`abstract` source
-badge, and a clickable PubMed URL.
+The **Source** column shows the depth each paper was stored at
+(`results` / `review` / `abstract`).
 
-### 4 — Ask with LLM (RAG)
-
-```
-scirag ❯ /llm "What distinguishes anterior from posterior RSC?"
-```
-
-Shows retrieved sources first, then a cited answer. Remembers conversation
-history within the session — follow-up questions work naturally.
+### 3 — Inspect a paper
 
 ```
-scirag ❯ /llm "Which cell types mediate this?"   # follow-up
-scirag ❯ /llm --reset                            # clear history
+scirag[rsc] ❯ /show 32147692
 ```
 
-### 5 — Web UI
+Prints the exact embedded text (abstract, Results section, or review body) for
+one PMID — the way to confirm what actually went into the index.
+
+### 4 — Ask, grounded in your papers
+
+One-shot question (prints a one-line source summary, then a cited answer):
 
 ```
-scirag ❯ /llm-ui              # opens http://localhost:8000
-scirag ❯ /llm-ui --port 8080  # custom port
+scirag[rsc] ❯ /llm "What distinguishes anterior from posterior RSC?"
 ```
 
-Requires `uv sync --extra ui` first. Features:
+Or enter **conversation mode** — type a bare `/llm` and then ask questions
+directly, with history kept across turns:
 
-- Chat interface with streaming responses
-- Retrieved sources shown inline before each answer (title, year, source type, snippet)
-- Full source text accessible in the sidebar
-- General questions answered from LLM knowledge; research questions trigger RAG automatically
-- ⚙️ settings panel to switch LLM backend mid-conversation
-- `/reset` in chat to clear conversation history
+```
+scirag[rsc] ❯ /llm
+scirag[rsc] LLM mode ❯ What distinguishes anterior from posterior RSC?
+scirag[rsc] LLM mode ❯ Which cell types mediate this?     # follow-up
+scirag[rsc] LLM mode ❯ /reset                             # clear history
+scirag[rsc] LLM mode ❯ /exit                              # back to the shell
+```
 
-The web UI and shell share the same index and project — index papers in the
-shell, ask questions in the browser, or mix both freely.
+When no indexed source is relevant enough, scirag answers from general
+knowledge and says so instead of citing weak matches.
 
 ---
 
-## Projects
+## Supporting commands
 
-Separate indexes per research topic, stored in `~/.scirag-agent/projects/`.
+### Import PDFs
 
-```
-scirag ❯ /create-project rsc "Retrosplenial cortex circuits"
-scirag ❯ /create-project place-cells "Hippocampal navigation"
-
-scirag ❯ /project              # list all
-  ● rsc          Retrosplenial cortex circuits   created 2026-06-10
-  ○ place-cells  Hippocampal navigation          created 2026-06-10
-
-scirag ❯ /project place-cells  # switch
-scirag ❯ /project --default    # back to global index
-scirag ❯ /delete-project rsc   # asks for confirmation
-```
-
-Prompt shows the active project: `scirag[rsc] ❯`
-
----
-
-## LLM backends
+When automatic full-text retrieval can't reach a paper, import PDFs you've
+downloaded:
 
 ```
-scirag ❯ /model
+scirag[rsc] ❯ /import-pdf ~/Downloads/paper.pdf
+scirag[rsc] ❯ /import-dir ~/Downloads/papers/        # all PDFs in a folder
 ```
 
+Each PDF is resolved to a PubMed record by **PMID** (numeric filename), **DOI**,
+or **title search**. Unresolved PDFs are *not* imported — scirag prints a PubMed
+lookup URL; find the PMID, rename the file to `<PMID>.pdf`, and re-import. Path
+arguments tab-complete, and `→` descends into a directory.
+
+### Search PubMed (no index, no LLM)
+
 ```
-Key              Model                                Needs
-local-qwen14b    ollama/qwen2.5:14b-instruct-q4_K_M               ← active
-local-llama8b    ollama/llama3.1:8b-instruct-q4_K_M
-local-deepseek   ollama/deepseek-r1:14b
-claude-sonnet    anthropic/claude-sonnet-4-6          ANTHROPIC_API_KEY
-claude-opus      anthropic/claude-opus-4-8            ANTHROPIC_API_KEY
-gpt              openai/gpt-4o                        OPENAI_API_KEY
+scirag[rsc] ❯ /search "retrosplenial cortex lesion" --retmax 10
 ```
 
-Arrow keys to select, or `scirag ❯ /model claude-sonnet` directly.
-Switch applies to all agents for the current session — `configs/models.yaml`
-is never modified.
+Discovery only — shows availability badges (`PMC✓` full text, `DOI✓` open-access
+PDF, `ABS✓` abstract) so you can see what `/index --full-text` will be able to fetch.
+
+### Web UI
+
+```
+scirag[rsc] ❯ /llm-ui              # opens http://localhost:8000
+scirag[rsc] ❯ /llm-ui --port 8080  # custom port
+```
+
+Requires `uv sync --extra ui`. Streaming chat, a **click-to-expand Sources** row
+per answer, and a settings panel to switch backend mid-conversation. The web UI
+and shell share the same index and project — index in the shell, ask in the
+browser, or mix freely.
 
 ---
 
@@ -195,25 +215,23 @@ is never modified.
 
 | Command | Description |
 |---|---|
-| `/search <query> [--retmax N]` | PubMed search with availability indicators |
+| `/search <query> [--retmax N]` | PubMed search with availability badges |
 | `/index <query> [--retmax N] [--full-text]` | Fetch, preview, select, embed |
-| `/retrieve <query>` | Query local index (no LLM) |
-| `/llm <question> [--reset]` | RAG answer with sources + conversation memory |
-| `/llm-ui [--port N]` | Open Chainlit web UI in browser |
+| `/retrieve <query>` | Show retrieved chunks for a query (no LLM) |
+| `/show <pmid>` | Print a paper's stored abstract/results/review text |
+| `/llm [<question>] [--reset]` | RAG answer; bare `/llm` = conversation mode |
+| `/llm-ui [--port N]` | Open the Chainlit web UI |
 | `/model [backend-key]` | List or switch LLM backend |
-| `/import-pdf <path>` | Index a single PDF (Results section only) |
-| `/import-dir <path>` | Index all PDFs in a directory |
+| `/import-pdf <path>` / `/import-dir <path>` | Import PDF(s), resolved to PubMed |
 | `/env [set\|unset <KEY> <val>]` | Manage API keys in `~/.scirag-agent/.env` |
-| `/status` | Index statistics |
+| `/status` | Index listing + statistics |
+| `/remove [pmid …]` | Remove article(s) from the index |
 | `/clear-db [--force]` | Delete the active index |
-| `/create-project <name> [desc]` | Create project and switch to it |
-| `/project [name\|--default]` | List or switch projects |
-| `/delete-project <name> [--force]` | Delete a project and its index |
-| `/help` | Show all commands |
-| `/clear` | Clear the screen |
-| `/exit` | Exit |
+| `/create-project <name> [desc]` / `/project [name\|--default]` / `/delete-project <name>` | Manage projects |
+| `/help` · `/clear` · `/exit` | Help, clear screen, quit |
 
-All commands also available as subcommands: `scirag index "..."`, `scirag llm "..."`, etc.
+All commands are also available as CLI subcommands: `scirag index "…"`,
+`scirag show 32147692`, `scirag llm "…"`, etc.
 
 ---
 
@@ -225,28 +243,25 @@ All commands also available as subcommands: `scirag index "..."`, `scirag llm ".
   lancedb/                    # global index
   projects/
     rsc/lancedb/              # per-project indexes
-    place-cells/lancedb/
   projects.json               # project registry
   .active_project             # active project name
 
 configs/
-  models.yaml                 # LLM backends + embeddings
+  models.yaml                 # LLM backends + embeddings (per-agent routing)
   pipeline.yaml               # chunk sizes, retrieval parameters
 ```
 
 ---
 
-## Full-text retrieval notes
+## Full-text coverage
 
-Only the **Results section** is indexed — not introduction, methods, or
-discussion. Coverage per source:
-
-| Source | Coverage | Requires |
+| Source | Used for | Requires |
 |---|---|---|
-| PMC full text | ~40 % of PubMed | Open-access articles only |
-| Unpaywall PDF | +20–30 % | DOI present; legal free copy exists |
-| Manual PDF import | anything | `/import-pdf` or `/import-dir` |
-| Abstract fallback | 100 % | Always available |
+| PMC full text (Results) | research articles | open-access in PMC |
+| Open-access PDF (Results) | research articles | DOI + a legal free copy (Unpaywall) |
+| Review whole-body | review articles | resolved as a PubMed `Review` |
+| Manual PDF import | anything resolvable | `/import-pdf` / `/import-dir` |
+| Abstract | fallback | always available from PubMed |
 
-For papers with no free full text, `scirag` warns and prints the PubMed URL
-for manual download.
+For papers with no retrievable full text, scirag falls back to the abstract; for
+PDFs that can't be matched to PubMed at all, it skips them and prints the lookup URL.
