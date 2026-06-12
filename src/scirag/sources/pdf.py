@@ -1,15 +1,20 @@
-"""PDF ingestion: text extraction and Results-section isolation.
+"""PDF ingestion: resolve a PDF to its PubMed record + isolate the Results section.
 
-Used by manual import commands (`scirag import-pdf / import-dir`) and
-by the Unpaywall fallback in sources/pubmed.py.
+A PDF is only imported if it can be resolved to a real PubMed record (so the
+index never holds guessed/garbage metadata). Resolution order: PMID (numeric
+filename) -> DOI -> title search. If none resolves, the PDF is skipped and a
+warning points the user at a PubMed URL to look it up manually.
+
+Also used by the Unpaywall fallback in sources/pubmed.py (`extract_text_from_pdf`,
+`extract_results_section`).
 """
 
 from __future__ import annotations
 
-import hashlib
 import re
 import warnings
 from pathlib import Path
+from urllib.parse import quote
 
 import pypdf
 
@@ -19,24 +24,33 @@ from scirag.sources.pubmed import Article
 # DOI anywhere in the extracted text (publisher PDFs print it on the first page).
 _DOI_RE = re.compile(r"10\.\d{4,9}/[-._;()/:A-Za-z0-9]+")
 
-# Years plausible as a publication date.
-_YEAR_RE = re.compile(r"\b(?:19|20)\d{2}\b")
+# eLife prints a per-component DOI (…/eLife.NNNNN.00N); PubMed indexes the bare
+# article DOI (…/eLife.NNNNN), so the trailing component must be stripped.
+_ELIFE_COMPONENT_RE = re.compile(r"(10\.7554/eLife\.\d+)\.\d+$", re.IGNORECASE)
+
+# A /Title that is only digits/spaces/dots is a typesetting artifact, not a title.
+_BAD_TITLE_RE = re.compile(r"^[\d\s.]+$")
 
 # Lines that are page furniture, not the paper's title.
 _TITLE_SKIP_RE = re.compile(
-    r"^(article|letter|review|open|www\.|https?://|doi[:\s]|received|accepted|published)\b",
+    r"^(article|letter|review|open|www\.|https?://|doi[:\s]|received|accepted|published|"
+    r"copyright|this is an open|creative commons|\*?for correspondence|competing interests|"
+    r"funding|advance access|original article)\b",
     re.IGNORECASE,
 )
 
+# Optional section numbering before a heading: "3.", "3 ", "3.1.", "III." …
+_SECTION_NUM = r"(?:\d{1,2}(?:\.\d{1,2})*\.?\s+|[IVX]{1,4}\.\s+)?"
+
 # Headings that start the Results section (and variants like "Results and Discussion")
 _RESULTS_RE = re.compile(
-    r"(?m)^\s*(results?(\s+and\s+(discussion|analysis|interpretation))?)\s*[:\.]?\s*$",
+    rf"(?m)^\s*{_SECTION_NUM}results?(\s+and\s+(discussion|analysis|interpretation))?\s*[:\.]?\s*$",
     re.IGNORECASE,
 )
 
 # Headings that end the Results section
 _END_SECTION_RE = re.compile(
-    r"(?m)^\s*(discussion|methods?|materials?\s*and\s*methods?|"
+    rf"(?m)^\s*{_SECTION_NUM}(discussion|methods?|materials?\s*and\s*methods?|"
     r"experimental(\s+procedures?)?|conclusion|references?|"
     r"acknowledgements?|supplementary|bibliography)\s*[:\.]?\s*$",
     re.IGNORECASE,
@@ -60,31 +74,42 @@ def extract_results_section(text: str) -> str:
     return text[start:end].strip()
 
 
-def _pmid_from_stem(stem: str) -> str:
-    """Return stem if it looks like a PMID (all digits), else a short hash."""
-    return stem if stem.isdigit() else f"pdf:{hashlib.md5(stem.encode()).hexdigest()[:8]}"
-
-
 def _extract_doi(text: str) -> str:
-    """Pull the first DOI out of the extracted text, or '' if none found."""
+    """Pull the first DOI out of the extracted text (normalized), or '' if none."""
     m = _DOI_RE.search(text)
     if not m:
         return ""
     # Strip trailing sentence/line punctuation that the regex may have swallowed.
-    return m.group(0).rstrip(".,;)")
+    doi = m.group(0).rstrip(".,;)")
+    # eLife's per-component suffix (…NNNNN.00N) isn't what PubMed indexes.
+    elife = _ELIFE_COMPONENT_RE.match(doi)
+    return elife.group(1) if elife else doi
 
 
-def _extract_year(text: str) -> str:
-    """Best-effort publication year from the first page, or '' (offline fallback)."""
-    years = [int(y) for y in _YEAR_RE.findall(text[:3000])]
-    return str(max(years)) if years else ""
+def _clean_pdf_title(raw) -> str:
+    """Return a usable title from a PDF's /Title metadata, or '' if missing/garbage."""
+    if not isinstance(raw, str):
+        return ""
+    t = raw.strip()
+    if len(t) < 10 or _BAD_TITLE_RE.match(t):
+        return ""
+    return t[:200]
+
+
+def _pdf_meta_field(reader, field: str) -> str:
+    """Read a /Title or /Author string from PDF document info, '' if absent."""
+    info = getattr(reader, "metadata", None)
+    if not info:
+        return ""
+    val = getattr(info, field, None)
+    return val.strip() if isinstance(val, str) else ""
 
 
 def _guess_title(text: str) -> str:
-    """Pick the most title-like line, skipping page furniture (offline fallback)."""
+    """Pick the most title-like line, skipping page furniture."""
     for ln in text.splitlines():
         s = ln.strip()
-        if len(s) < 15 or "://" in s or s.startswith("10."):
+        if len(s) < 15 or "://" in s or "@" in s or s.startswith("10.") or s.startswith("©"):
             continue
         if _TITLE_SKIP_RE.match(s):
             continue
@@ -92,67 +117,103 @@ def _guess_title(text: str) -> str:
     return ""
 
 
-def _resolve_via_pubmed(doi: str) -> Article | None:
-    """Resolve a real PubMed record from a DOI, or None if unavailable/offline."""
+def _titles_match(a: str, b: str) -> bool:
+    """True if titles `a` and `b` share enough words to be the same paper."""
+    wa = set(re.findall(r"[a-z0-9]+", a.lower()))
+    wb = set(re.findall(r"[a-z0-9]+", b.lower()))
+    if not wa or not wb:
+        return False
+    return len(wa & wb) / len(wa) >= 0.6
+
+
+def _fetch_first(pmids: list[str]) -> Article | None:
+    arts = pubmed.fetch(pmids) if pmids else []
+    return arts[0] if arts else None
+
+
+def _resolve_via_pmid(pmid: str) -> Article | None:
+    """Fetch a PubMed record directly by PMID (numeric filename), or None."""
     try:
-        pmids = pubmed.search(f"{doi}[doi]", retmax=1)
-        if not pmids:
-            return None
-        arts = pubmed.fetch(pmids)
-        return arts[0] if arts else None
+        return _fetch_first([pmid])
     except Exception:
-        return None  # NCBI unreachable / offline — caller falls back to local extraction
+        return None
 
 
-def load_pdf_as_article(path: Path) -> Article:
-    """Load a single PDF as an Article.
+def _resolve_via_doi(doi: str) -> Article | None:
+    """Resolve a PubMed record from a DOI, or None if no match/offline."""
+    try:
+        return _fetch_first(pubmed.search(f"{doi}[doi]", retmax=1))
+    except Exception:
+        return None
 
-    Metadata resolution, best to worst:
-    1. If a DOI is found in the text, look up the real PubMed record (correct
-       PMID, title, year, journal, MeSH) and graft the PDF's Results text onto it.
-    2. Otherwise fall back to local extraction: PMID from filename (or a hash),
-       year and title guessed from the text.
 
-    - full_text: Results section only. Empty if no Results section detected.
-    - abstract: left empty for the local fallback (not reliably parseable).
+def _resolve_via_title(title: str) -> Article | None:
+    """Resolve a PubMed record by title search, accepting only a confident match."""
+    if not title:
+        return None
+    try:
+        art = _fetch_first(pubmed.search(f"{title}[title]", retmax=1))
+    except Exception:
+        return None
+    if art is not None and _titles_match(title, art.title):
+        return art
+    return None
+
+
+def _warn_unresolved(path: Path, doi: str, title: str) -> None:
+    if doi:
+        term, detail = doi, f"DOI {doi}"
+    elif title:
+        term, detail = title, "no DOI found"
+    else:
+        term, detail = "", "no DOI or title found"
+    url = (
+        f"https://pubmed.ncbi.nlm.nih.gov/?term={quote(term)}"
+        if term
+        else "https://pubmed.ncbi.nlm.nih.gov/"
+    )
+    warnings.warn(
+        f"{path.name}: could not resolve to a PubMed record ({detail}) — NOT imported.\n"
+        f"  Check {url}\n"
+        f"  then rename the file to <PMID>.pdf and re-import.",
+        stacklevel=2,
+    )
+
+
+def load_pdf_as_article(path: Path) -> Article | None:
+    """Resolve a PDF to its PubMed record, with the PDF's Results text grafted on.
+
+    Resolution order: PMID (numeric filename) -> DOI -> title search. Returns
+    None (and warns with a PubMed lookup URL) when none resolves, so unresolved
+    PDFs are skipped rather than indexed with guessed metadata.
     """
-    text = extract_text_from_pdf(path)
+    reader = pypdf.PdfReader(str(path))
+    text = "\n".join(page.extract_text() or "" for page in reader.pages)
     results = extract_results_section(text)
 
-    if not results:
-        warnings.warn(
-            f"{path.name}: no Results section found — article will not contribute text to the index.",
-            stacklevel=2,
-        )
-
+    stem = path.stem
     doi = _extract_doi(text)
+    candidate_title = _clean_pdf_title(_pdf_meta_field(reader, "title")) or _guess_title(text)
 
-    if doi:
-        resolved = _resolve_via_pubmed(doi)
-        if resolved is not None:
-            resolved.full_text = results
-            return resolved
-        warnings.warn(
-            f"{path.name}: DOI {doi} found but no PubMed match (or offline) — "
-            "using metadata extracted from the PDF.",
-            stacklevel=2,
-        )
+    resolved: Article | None = None
+    if stem.isdigit():
+        resolved = _resolve_via_pmid(stem)
+    if resolved is None and doi:
+        resolved = _resolve_via_doi(doi)
+    if resolved is None and candidate_title:
+        resolved = _resolve_via_title(candidate_title)
 
-    title = _guess_title(text) or next(
-        (ln.strip() for ln in text.splitlines() if ln.strip()), path.stem
-    )
-    return Article(
-        pmid=_pmid_from_stem(path.stem),
-        title=title[:200],
-        abstract="",
-        year=_extract_year(text),
-        doi=doi,
-        full_text=results,
-    )
+    if resolved is not None:
+        resolved.full_text = results
+        return resolved
+
+    _warn_unresolved(path, doi, candidate_title)
+    return None
 
 
 def load_pdf_directory(dir_path: Path) -> list[Article]:
-    """Load all *.pdf files in dir_path as Articles. Skips files that fail."""
+    """Load all *.pdf in dir_path as Articles. Skips files that fail to parse or
+    that can't be resolved to a PubMed record (each emits a warning)."""
     articles: list[Article] = []
     pdfs = sorted(dir_path.glob("*.pdf"))
     if not pdfs:
@@ -160,7 +221,10 @@ def load_pdf_directory(dir_path: Path) -> list[Article]:
         return articles
     for pdf_path in pdfs:
         try:
-            articles.append(load_pdf_as_article(pdf_path))
+            article = load_pdf_as_article(pdf_path)
         except Exception as exc:
             warnings.warn(f"Skipping {pdf_path.name}: {exc}", stacklevel=2)
+            continue
+        if article is not None:
+            articles.append(article)
     return articles

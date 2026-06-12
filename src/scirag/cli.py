@@ -373,6 +373,11 @@ def do_import_pdf(path: str) -> None:
         article = load_pdf_as_article(p)
     for w in caught:
         console.print(f"[yellow]Warning:[/] {w.message}")
+    if article is None:
+        console.print(
+            f"[yellow]Not imported:[/] {p.name} could not be resolved to a PubMed record."
+        )
+        return
     console.print(f"Loaded [cyan]{p.name}[/] → PMID={article.pmid}, title={article.title[:60]}")
     console.print("Embedding + indexing...")
     build_index([article])
@@ -393,9 +398,9 @@ def do_import_dir(path: str) -> None:
     for w in caught:
         console.print(f"[yellow]Warning:[/] {w.message}")
     if not articles:
-        console.print("[yellow]No articles loaded.[/]")
+        console.print("[yellow]No PDFs resolved to a PubMed record — nothing imported.[/]")
         return
-    console.print(f"Loaded [cyan]{len(articles)}[/] PDFs. Embedding + indexing...")
+    console.print(f"Resolved [cyan]{len(articles)}[/] article(s). Embedding + indexing...")
     build_index(articles)
     console.print("[green]Indexed.[/]")
 
