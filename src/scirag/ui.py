@@ -91,49 +91,30 @@ async def on_message(message: cl.Message) -> None:
         if nonempty:
             step.output = f"Entities: {nonempty}"
 
-    # --- Show retrieved sources as an expanded step + sidebar elements ---
-    seen: set[str] = set()
-    elements: list[cl.Text] = []
-    retrieve_lines: list[str] = []
-
-    for n in result.nodes:
-        md = n.node.metadata
-        pmid = md.get("pmid", "?")
-        title = md.get("title", "")
-        year = md.get("year", "")
-        url = md.get("url", "")
-        src = md.get("text_source", "abstract")
-        snippet = n.node.get_content()[:200].replace("\n", " ")
-
-        # Inline retrieve display (one entry per paper)
-        if pmid not in seen:
-            retrieve_lines.append(
-                f"**[{pmid}]** [{title[:65]}]({url}) *({year})* · `{src}`  \n> {snippet}…"
+    # --- Retrieved sources as one collapsible step (click the row to expand) ---
+    if result.nodes:
+        seen: set[str] = set()
+        blocks: list[str] = []
+        for n in result.nodes:
+            md = n.node.metadata
+            pmid = md.get("pmid", "?")
+            if pmid in seen:
+                continue
+            seen.add(pmid)
+            title = md.get("title", "")
+            year = md.get("year", "")
+            url = md.get("url", "")
+            src = md.get("text_source", "abstract")
+            snippet = n.node.get_content()[:400].replace("\n", " ")
+            blocks.append(
+                f"**[{pmid}]** [{title[:75]}]({url}) *({year})* · `{src}`\n\n> {snippet}…"
             )
-
-        seen.add(pmid)
-
-        # Sidebar element with full snippet
-        elements.append(
-            cl.Text(
-                name=f"[{pmid}] {title[:55]}",
-                content=(
-                    f"**{title}** ({year})  \n"
-                    f"Source: **{src}**  \n"
-                    f"[PubMed ↗]({url})\n\n"
-                    f"{n.node.get_content()[:500]}…"
-                ),
-                display="side",
-            )
-        )
-
-    if retrieve_lines:
-        await cl.Message(
-            content="**Retrieved sources**\n\n" + "\n\n".join(retrieve_lines),
-        ).send()
+        label = f"Sources · {len(seen)} paper(s), {len(result.nodes)} chunk(s)"
+        async with cl.Step(name=label, type="tool") as src_step:
+            src_step.output = "\n\n---\n\n".join(blocks)
 
     # --- Stream answer (messages already assembled by the shared pipeline) ---
-    answer_msg = cl.Message(content="", elements=elements)
+    answer_msg = cl.Message(content="")
     await answer_msg.send()
 
     answer = ""

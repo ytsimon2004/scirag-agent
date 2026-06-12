@@ -295,35 +295,11 @@ def do_model(backend_key: str = "") -> None:
 
 # Conversation history for /llm — lives for the duration of the process.
 _llm_history: list[dict[str, str]] = []
-# Collapse source passages by default; toggle with /sources or Ctrl+O.
-_show_sources: bool = False
-# Nodes from the most recent grounded answer, kept for on-demand expansion.
-_last_sources: list = []
-
-
-def _render_sources(nodes) -> None:
-    """Print the full source-passage block (PMID, title, snippet, link)."""
-    from rich.rule import Rule
-
-    console.print(Rule("[dim]Sources[/]", style="dim"))
-    for n in nodes:
-        md = n.node.metadata
-        url = md.get("url", "")
-        src = md.get("text_source", "")
-        src_tag = "[green]results[/]" if src == "results" else "[dim]abstract[/]"
-        pmid_str = f"[link={url}]{md.get('pmid', '?')}[/link]" if url else md.get("pmid", "?")
-        snippet = n.node.get_content()[:100].replace("\n", " ")
-        console.print(
-            f"  [bold cyan]{pmid_str}[/] {md.get('title', '')[:60]}  "
-            f"[dim]({md.get('year', 'n.d.')})[/]  {src_tag}"
-        )
-        console.print(f"  [dim]{snippet}…[/]")
-        if url:
-            console.print(f"  [dim][link={url}]{url}[/link][/]")
 
 
 def _source_summary(nodes) -> str:
-    """One-line collapsed summary of the retrieved sources."""
+    """One-line summary of the sources grounding the answer. Full sources with
+    snippets and links are available in the web UI (/llm-ui)."""
     pmids: list[str] = []
     for n in nodes:
         p = n.node.metadata.get("pmid", "?")
@@ -332,46 +308,29 @@ def _source_summary(nodes) -> str:
     papers = "paper" if len(pmids) == 1 else "papers"
     return (
         f"[dim]▸ grounded on {len(nodes)} chunk(s) from {len(pmids)} {papers} "
-        f"({', '.join(pmids)}) — [/][cyan]/sources[/][dim] to expand · Ctrl+O to toggle[/]"
+        f"({', '.join(pmids)})[/]"
     )
 
 
-def do_sources(arg: str = "") -> None:
-    """Show or toggle retrieved source passages.
+def _answer_with_spinner(messages: list[dict[str, str]], *, max_tokens: int = 1200) -> str:
+    """Run the synthesizer call behind a live 'Reasoning…' spinner so the long
+    wait shows progress instead of a frozen screen. Returns the answer text."""
+    from rich.text import Text
 
-    `/sources` expands the last answer's sources once; `/sources on|off` sets
-    whether sources are shown automatically for every answer.
-    """
-    global _show_sources
-    a = arg.strip().lower()
-    if a in ("on", "show", "expand"):
-        _show_sources = True
-        console.print("[dim]Sources will now be shown for each answer.[/]")
-        return
-    if a in ("off", "hide", "collapse"):
-        _show_sources = False
-        console.print("[dim]Sources collapsed — [/][cyan]/sources[/][dim] to expand on demand.[/]")
-        return
-    if _last_sources:
-        _render_sources(_last_sources)
-    else:
-        console.print("[dim]No sources from the last answer.[/]")
+    from scirag.llm.router import complete
 
-
-def toggle_show_sources() -> bool:
-    """Flip the default source visibility; returns the new state (used by Ctrl+O)."""
-    global _show_sources
-    _show_sources = not _show_sources
-    return _show_sources
+    with console.status(Text("Reasoning…", style="dim"), spinner="dots"):
+        return complete("synthesizer", messages, max_tokens=max_tokens)
 
 
 def do_llm(query: str, *, reset: bool = False) -> None:
-    """RAG-grounded answer with collapsible sources and multi-turn conversation memory."""
+    """RAG-grounded answer with a one-line source summary and conversation memory.
+
+    Full source passages (with snippets and links) live in the web UI (/llm-ui)."""
     from rich.rule import Rule
     from scirag.agents.pipeline import prepare_answer
-    from scirag.llm.router import complete
 
-    global _llm_history, _last_sources
+    global _llm_history
     if reset:
         _llm_history = []
         console.print("[dim]Conversation history cleared.[/]")
@@ -384,25 +343,19 @@ def do_llm(query: str, *, reset: bool = False) -> None:
         console.print(f"[dim]entities: {nonempty}[/]")
 
     if result.use_rag:
-        _last_sources = result.nodes
-        if _show_sources:
-            _render_sources(result.nodes)
-        else:
-            console.print(_source_summary(result.nodes))
+        console.print(_source_summary(result.nodes))
     else:
-        _last_sources = []
         console.print(
             f"[dim]No relevant sources (top score {result.top_score:.2f}) — answering from general knowledge.[/]"
         )
 
-    console.print(Rule("[dim]Answer[/]", style="dim"))
-
-    answer = complete("synthesizer", result.messages, max_tokens=1200)
+    answer = _answer_with_spinner(result.messages, max_tokens=1200)
 
     # Persist turn in history (store the bare question, not the full sources block)
     _llm_history.append({"role": "user", "content": f"Question: {query}"})
     _llm_history.append({"role": "assistant", "content": answer})
 
+    console.print(Rule("[dim]Answer[/]", style="dim"))
     console.print(Markdown(answer))
     console.print(f"\n[dim](conversation turn {len(_llm_history) // 2} — /llm --reset to clear)[/]")
 

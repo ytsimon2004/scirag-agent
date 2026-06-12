@@ -23,8 +23,7 @@ _COMMANDS: list[tuple[str, str, str]] = [
     ("/index", "<query> [--retmax N] [--full-text]", "interactive fetch + select + index"),
     ("/retrieve", "<query>", "query local index (no LLM)"),
     ("/llm", "[<question>] [--reset]", "RAG answer; bare /llm = sticky conversation mode"),
-    ("/sources", "[on|off]", "expand last answer's sources, or set default (Ctrl+O toggles)"),
-    ("/llm-ui", "[--port N]", "open Chainlit web UI in browser"),
+    ("/llm-ui", "[--port N]", "open Chainlit web UI in browser (click-to-expand sources)"),
     ("/model", "[backend-key]", "list or switch LLM backend"),
     ("/import-pdf", "<path>", "index a single PDF (Results section only)"),
     ("/import-dir", "<path>", "index all PDFs in a directory"),
@@ -109,12 +108,11 @@ def _chat_mode(session: PromptSession) -> None:
     (returns to the command prompt) or /exit (quits scirag); /reset clears
     the running conversation.
     """
-    from scirag.cli import do_llm, do_sources
+    from scirag.cli import do_llm
 
     console.print(
         "[dim]LLM mode — type questions directly.  "
-        "[/][cyan]/exit[/][dim] to return to the shell · [/][cyan]/reset[/][dim] to clear history · "
-        "[/][cyan]/sources[/][dim] to expand sources.[/]"
+        "[/][cyan]/exit[/][dim] to return to the shell · [/][cyan]/reset[/][dim] to clear history.[/]"
     )
     while True:
         try:
@@ -133,9 +131,6 @@ def _chat_mode(session: PromptSession) -> None:
             break  # leave LLM mode; /exit again at the shell quits scirag
         if low in ("/reset", "reset"):
             do_llm("", reset=True)
-            continue
-        if low == "/sources" or low.startswith("/sources "):
-            do_sources(line[len("/sources") :].strip())
             continue
         if line.startswith("/"):
             # Keep LLM mode focused: foreign commands aren't run here.
@@ -385,11 +380,6 @@ def _dispatch(line: str, session: PromptSession) -> None:
 
             do_llm(query)
 
-    elif cmd == "/sources":
-        from scirag.cli import do_sources
-
-        do_sources(query)
-
     elif cmd == "/llm-ui":
         from scirag.cli import do_llm_ui
 
@@ -439,22 +429,12 @@ def _import_dir_arg(text: str) -> str | None:
 def _build_key_bindings():
     """Shell-wide key bindings.
 
-    - Ctrl+O toggles whether /llm shows source passages.
     - Right arrow descends into a completed directory for the /import-* commands
       (appends the separator and reopens completion); otherwise moves the cursor.
     """
-    from prompt_toolkit.application import run_in_terminal
     from prompt_toolkit.key_binding import KeyBindings
 
     kb = KeyBindings()
-
-    @kb.add("c-o")
-    def _toggle_sources(event) -> None:
-        from scirag.cli import toggle_show_sources
-
-        shown = toggle_show_sources()
-        state = "shown" if shown else "collapsed"
-        run_in_terminal(lambda: console.print(f"[dim]Sources {state} (Ctrl+O).[/]"))
 
     @kb.add("right")
     def _descend_or_move(event) -> None:
