@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 from datetime import date
 from pathlib import Path
-from typing import Optional
 
 
 def _data_dir() -> Path:
@@ -37,7 +36,7 @@ def list_projects() -> list[dict]:
     return json.loads(p.read_text()) if p.exists() else []
 
 
-def get_active_project() -> Optional[str]:
+def get_active_project() -> str | None:
     p = _active_path()
     if p.exists():
         name = p.read_text().strip()
@@ -58,7 +57,7 @@ def get_active_db_uri() -> str:
 # ---------------------------------------------------------------------------
 
 
-def set_active_project(name: Optional[str]) -> None:
+def set_active_project(name: str | None) -> None:
     p = _active_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     if name:
