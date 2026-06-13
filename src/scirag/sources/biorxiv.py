@@ -63,21 +63,37 @@ def _get(
 # ---------------------------------------------------------------------------
 
 
-def _epmc_query(keywords: str, days_back: int | None) -> str:
+def _epmc_query(
+    keywords: str,
+    days_back: int | None,
+    min_year: str = "",
+    max_year: str = "",
+) -> str:
     q = f'{keywords} AND (SRC:PPR AND PUBLISHER:"bioRxiv")'
-    if days_back:
+    if min_year or max_year:
+        start = f"{min_year}-01-01" if min_year else "1900-01-01"
+        end = f"{max_year}-12-31" if max_year else date.today().isoformat()
+        q += f" AND (FIRST_PDATE:[{start} TO {end}])"
+    elif days_back:
         end = date.today()
         start = end - timedelta(days=days_back)
         q += f" AND (FIRST_PDATE:[{start.isoformat()} TO {end.isoformat()}])"
     return q
 
 
-def _epmc_search(keywords: str, *, days_back: int | None, retmax: int) -> list[dict]:
+def _epmc_search(
+    keywords: str,
+    *,
+    days_back: int | None,
+    retmax: int,
+    min_year: str = "",
+    max_year: str = "",
+) -> list[dict]:
     """Relevance-ranked Europe PMC search for bioRxiv preprints. Returns core records."""
     r = _get(
         EPMC,
         params={
-            "query": _epmc_query(keywords, days_back),
+            "query": _epmc_query(keywords, days_back, min_year=min_year, max_year=max_year),
             "format": "json",
             "resultType": "core",
             "pageSize": min(retmax, 100),
@@ -115,12 +131,19 @@ def search(keywords: str, *, days_back: int | None = 180, retmax: int = 25) -> l
 
 
 def search_and_fetch(
-    keywords: str, *, days_back: int | None = 180, retmax: int = 25
+    keywords: str,
+    *,
+    days_back: int | None = 180,
+    retmax: int = 25,
+    min_year: str = "",
+    max_year: str = "",
 ) -> list[Article]:
     """Keyword search → Article records, in one Europe PMC round-trip."""
     seen: set[str] = set()
     out: list[Article] = []
-    for rec in _epmc_search(keywords, days_back=days_back, retmax=retmax):
+    for rec in _epmc_search(
+        keywords, days_back=days_back, retmax=retmax, min_year=min_year, max_year=max_year
+    ):
         doi = rec.get("doi")
         if doi and doi not in seen:
             seen.add(doi)

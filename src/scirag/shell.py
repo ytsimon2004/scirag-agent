@@ -20,10 +20,14 @@ console = Console()
 
 # (command, args-hint, description)
 _COMMANDS: list[tuple[str, str, str]] = [
-    ("/index", "<query> [--retmax N] [--full-text]", "fetch + select + index PubMed articles"),
+    (
+        "/index",
+        "<query> [--retmax N] [--full-text] [--year-from YYYY] [--year-to YYYY]",
+        "fetch + select + index PubMed articles",
+    ),
     (
         "/bindex",
-        "<query> [--retmax N] [--days-back N] [--full-text]",
+        "<query> [--retmax N] [--days-back N] [--full-text] [--year-from YYYY] [--year-to YYYY]",
         "fetch + select + index bioRxiv preprints",
     ),
     ("/retrieve", "<query>", "query local index (no LLM)"),
@@ -425,7 +429,9 @@ def _dispatch(line: str, session: PromptSession) -> None:
 
     if cmd == "/index":
         if not query:
-            console.print("[yellow]Usage:[/] /index <query> [--retmax N] [--full-text]")
+            console.print(
+                "[yellow]Usage:[/] /index <query> [--retmax N] [--full-text] [--year-from YYYY] [--year-to YYYY]"
+            )
             return
         from scirag.cli import do_index
 
@@ -433,12 +439,14 @@ def _dispatch(line: str, session: PromptSession) -> None:
             query,
             retmax=int(flags.get("retmax", 25)),
             full_text="full-text" in flags or "full_text" in flags,
+            year_from=flags.get("year-from", flags.get("year_from", "")),
+            year_to=flags.get("year-to", flags.get("year_to", "")),
         )
 
     elif cmd == "/bindex":
         if not query:
             console.print(
-                "[yellow]Usage:[/] /bindex <query> [--retmax N] [--days-back N] [--full-text]"
+                "[yellow]Usage:[/] /bindex <query> [--retmax N] [--days-back N] [--full-text] [--year-from YYYY] [--year-to YYYY]"
             )
             return
         from scirag.cli import do_bindex
@@ -448,6 +456,8 @@ def _dispatch(line: str, session: PromptSession) -> None:
             retmax=int(flags.get("retmax", 25)),
             days_back=int(flags.get("days-back", flags.get("days_back", 180))),
             full_text="full-text" in flags or "full_text" in flags,
+            year_from=flags.get("year-from", flags.get("year_from", "")),
+            year_to=flags.get("year-to", flags.get("year_to", "")),
         )
 
     elif cmd == "/retrieve":
@@ -587,6 +597,8 @@ def _build_key_bindings():
     """
     from prompt_toolkit.key_binding import KeyBindings
 
+    from prompt_toolkit.filters import completion_is_selected
+
     kb = KeyBindings()
 
     @kb.add("right")
@@ -598,6 +610,13 @@ def _build_key_bindings():
             buf.start_completion(select_first=False)
             return
         buf.cursor_right()
+
+    @kb.add("enter", filter=completion_is_selected)
+    def _enter_accepts_completion(event) -> None:
+        """Accept the highlighted completion without submitting the line."""
+        buf = event.current_buffer
+        buf.apply_completion(buf.complete_state.current_completion)
+        buf.cancel_completion()
 
     return kb
 

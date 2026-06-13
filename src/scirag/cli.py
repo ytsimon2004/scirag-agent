@@ -154,12 +154,18 @@ def print_retrieve_results(nodes) -> None:
 # ---------------------------------------------------------------------------
 
 
-def do_index(query: str, retmax: int = 25, full_text: bool = False) -> None:
+def do_index(
+    query: str,
+    retmax: int = 25,
+    full_text: bool = False,
+    year_from: str = "",
+    year_to: str = "",
+) -> None:
     import questionary
     from scirag.ingest.index import build_index, get_indexed_pmids
     from scirag.sources.pubmed import _pmids_to_pmcids
 
-    arts = pubmed.search_and_fetch(query, retmax=retmax)
+    arts = pubmed.search_and_fetch(query, retmax=retmax, min_year=year_from, max_year=year_to)
     if not arts:
         console.print("[yellow]No results.[/]")
         return
@@ -253,14 +259,27 @@ def do_index(query: str, retmax: int = 25, full_text: bool = False) -> None:
     console.print("[green]Indexed.[/]")
 
 
-def do_bindex(query: str, retmax: int = 25, days_back: int = 180, full_text: bool = False) -> None:
+def do_bindex(
+    query: str,
+    retmax: int = 25,
+    days_back: int = 180,
+    full_text: bool = False,
+    year_from: str = "",
+    year_to: str = "",
+) -> None:
     """Fetch, preview, select, and index bioRxiv preprints interactively."""
     import questionary
     from scirag.ingest.index import build_index, get_indexed_pmids
     from scirag.sources import biorxiv
 
-    console.print(f"[dim]Searching bioRxiv via Europe PMC (last {days_back} days)…[/]")
-    arts = biorxiv.search_and_fetch(query, days_back=days_back, retmax=retmax)
+    if year_from or year_to:
+        date_hint = f"{year_from or '…'}–{year_to or '…'}"
+        console.print(f"[dim]Searching bioRxiv via Europe PMC ({date_hint})…[/]")
+    else:
+        console.print(f"[dim]Searching bioRxiv via Europe PMC (last {days_back} days)…[/]")
+    arts = biorxiv.search_and_fetch(
+        query, days_back=days_back, retmax=retmax, min_year=year_from, max_year=year_to
+    )
     if not arts:
         console.print("[yellow]No results.[/] Try other terms or a wider [cyan]--days-back[/].")
         return
@@ -961,6 +980,8 @@ def do_clear_db(force: bool = False) -> None:
 _RETMAX_HELP = "max number of results to fetch"
 _DAYS_BACK_HELP = "how many days back to search bioRxiv (via Europe PMC)"
 _FULL_TEXT_HELP = "also fetch + index each paper's full-text Results section (slower)"
+_YEAR_FROM_HELP = "earliest publication year to include (e.g. 2018)"
+_YEAR_TO_HELP = "latest publication year to include (e.g. 2024)"
 
 
 @app.command()
@@ -968,9 +989,11 @@ def index(
     query: str,
     retmax: int = typer.Option(25, help=_RETMAX_HELP),
     full_text: bool = typer.Option(False, help=_FULL_TEXT_HELP),
+    year_from: str = typer.Option("", help=_YEAR_FROM_HELP),
+    year_to: str = typer.Option("", help=_YEAR_TO_HELP),
 ):
     """Fetch, preview, select, and index PubMed articles interactively."""
-    do_index(query, retmax, full_text)
+    do_index(query, retmax, full_text, year_from=year_from, year_to=year_to)
 
 
 @app.command()
@@ -979,9 +1002,11 @@ def bindex(
     retmax: int = typer.Option(25, help=_RETMAX_HELP),
     days_back: int = typer.Option(180, help=_DAYS_BACK_HELP),
     full_text: bool = typer.Option(False, help=_FULL_TEXT_HELP),
+    year_from: str = typer.Option("", help=_YEAR_FROM_HELP),
+    year_to: str = typer.Option("", help=_YEAR_TO_HELP),
 ):
     """Fetch, preview, select, and index bioRxiv preprints interactively."""
-    do_bindex(query, retmax, days_back, full_text)
+    do_bindex(query, retmax, days_back, full_text, year_from=year_from, year_to=year_to)
 
 
 @app.command()

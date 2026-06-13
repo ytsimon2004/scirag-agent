@@ -106,11 +106,23 @@ def _params(**extra) -> dict:
     return p
 
 
-def search(query: str, retmax: int = 25) -> list[str]:
+def search(
+    query: str,
+    retmax: int = 25,
+    min_year: str = "",
+    max_year: str = "",
+) -> list[str]:
     """esearch -> list of PMIDs."""
+    extra: dict = {}
+    if min_year or max_year:
+        extra["datetype"] = "pdat"
+        if min_year:
+            extra["mindate"] = min_year
+        if max_year:
+            extra["maxdate"] = max_year
     r = _get(
         "esearch.fcgi",
-        _params(term=query, retmax=retmax, sort="relevance"),
+        _params(term=query, retmax=retmax, sort="relevance", **extra),
         timeout=30,
     )
     root = ET.fromstring(r.text)
@@ -179,8 +191,13 @@ def _parse_article(art: ET.Element) -> Article:
     )
 
 
-def search_and_fetch(query: str, retmax: int = 25) -> list[Article]:
-    return fetch(search(query, retmax=retmax))
+def search_and_fetch(
+    query: str,
+    retmax: int = 25,
+    min_year: str = "",
+    max_year: str = "",
+) -> list[Article]:
+    return fetch(search(query, retmax=retmax, min_year=min_year, max_year=max_year))
 
 
 # ---------------------------------------------------------------------------
