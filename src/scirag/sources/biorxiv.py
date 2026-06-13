@@ -17,6 +17,7 @@ Article.source is set to "biorxiv" to drive the source-aware URL.
 
 from __future__ import annotations
 
+import re
 import time
 import warnings
 from datetime import date, timedelta
@@ -174,25 +175,47 @@ def _jatsxml_url(doi: str) -> str:
         collection = r.json().get("collection", [])
     except Exception:
         return ""
-    return collection[-1].get("jatsxml", "") if collection else ""
+    url = collection[-1].get("jatsxml", "") if collection else ""
+    # Newer records return a malformed path with a doubled slash before the file
+    # (…/2026/03/05//2026.03…source.xml), which 404s. Collapse runs of slashes,
+    # but not the "//" in "https://".
+    return re.sub(r"(?<!:)//+", "/", url)
+
+
+def _browser_get_text(url: str, *, timeout: float) -> str:
+    """Fetch a Cloudflare-gated bioRxiv URL as text, impersonating a real browser.
+
+    biorxiv.org fingerprints the TLS handshake, so plain httpx gets a 403 "Just a
+    moment" challenge. curl_cffi presents a genuine browser TLS fingerprint and
+    passes. Falls back to httpx (which will usually fail on biorxiv.org) only if
+    curl_cffi isn't installed.
+    """
+    try:
+        from curl_cffi import requests as creq
+    except ImportError:
+        r = httpx.get(url, timeout=timeout, follow_redirects=True, headers=_HEADERS)
+        r.raise_for_status()
+        return r.text
+    r = creq.get(url, impersonate="chrome", timeout=timeout)
+    r.raise_for_status()
+    return r.text
 
 
 def _fetch_jats_results(jats_url: str) -> str:
     """Download a bioRxiv JATS XML document and return its Results section."""
     try:
-        r = _get(jats_url, timeout=60)
-        return _extract_results_from_jats(ET.fromstring(r.text))
+        return _extract_results_from_jats(ET.fromstring(_browser_get_text(jats_url, timeout=60)))
     except Exception:
         return ""
 
 
 def enrich_with_fulltext(articles: list[Article]) -> None:
-    """Best-effort: fill in each preprint's Results section from its bioRxiv JATS XML.
+    """Fill in each preprint's Results section from its bioRxiv JATS XML.
 
-    Mutates articles in place. bioRxiv's full-text host (biorxiv.org) sits behind
-    Cloudflare bot protection, so this often fails; articles then index on their
-    abstract (Article.to_text falls back to abstract). Warns for any preprint with
-    no retrievable full text.
+    Mutates articles in place. The JATS host is Cloudflare-gated, so the fetch
+    goes through a browser-impersonating client (see _browser_get_text). Anything
+    that still fails indexes on its abstract (Article.to_text falls back to it);
+    a warning lists those preprints.
     """
     if not articles:
         return
@@ -208,7 +231,7 @@ def enrich_with_fulltext(articles: list[Article]) -> None:
         dois = ", ".join(a.doi for a in missing)
         warnings.warn(
             f"{len(missing)} preprint(s) have no retrievable full text "
-            f"(DOIs: {dois}) — indexing on abstract. The bioRxiv full-text host is "
-            "Cloudflare-protected; download the PDF and use `scirag import-pdf` to add it.",
+            f"(DOIs: {dois}) — indexing on abstract. If this persists, download the "
+            "PDF and use `scirag import-pdf` to add it.",
             stacklevel=2,
         )

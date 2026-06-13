@@ -31,9 +31,10 @@ one LiteLLM router, selectable per agent.
 - `src/scireg/llm/router.py` — `complete(agent, messages)`; the ONLY place LLMs are called.
 - `src/scireg/sources/pubmed.py` — NCBI E-utilities client (`Article` dataclass).
 - `src/scireg/sources/biorxiv.py` — bioRxiv source; keyword search via Europe PMC
-  (the bioRxiv API has no search endpoint), direct-DOI metadata + full-text JATS via
-  the bioRxiv API. Builds the same `Article` with the preprint DOI in the `pmid` slot
-  and `source="biorxiv"`.
+  (the bioRxiv API has no search endpoint), direct-DOI metadata via the bioRxiv API,
+  and full-text Results from the JATS XML — fetched with `curl_cffi` browser
+  impersonation since biorxiv.org's full-text host is Cloudflare-gated. Builds the
+  same `Article` with the preprint DOI in the `pmid` slot and `source="biorxiv"`.
 - `src/scireg/ingest/index.py` — LlamaIndex -> LanceDB (embedded, at `data/lancedb`).
 - `src/scireg/retrieval/retriever.py` — hybrid dense + BM25 with RRF fusion.
 - `src/scireg/neuro/entities.py` — neuro entity extraction + query expansion (extension point).

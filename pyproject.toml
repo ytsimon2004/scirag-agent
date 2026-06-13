@@ -17,6 +17,7 @@ dependencies = [
     "litellm>=1.50.0",
     # data sources
     "httpx>=0.27.0",
+    "curl-cffi>=0.7.0",         # browser-impersonating fetch for Cloudflare-gated bioRxiv full text
     "biopython>=1.84",          # Entrez E-utilities helpers
     "pypdf>=4.0.0",             # PDF text extraction for manual imports + Unpaywall PDFs
     # plumbing
@@ -34,6 +35,7 @@ mcp = ["mcp>=1.0.0"]
 eval = ["ragas>=0.2.0"]
 ui = ["chainlit>=2.0.0"]
 dev = ["pytest>=8.0", "ruff>=0.6.0", "pre-commit>=3.0.0"]
+all = []
 
 [project.scripts]
 scirag = "scirag.cli:app"

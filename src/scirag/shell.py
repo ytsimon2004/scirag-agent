@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+import re
 import shlex
 from pathlib import Path
 
 import os
 
 from prompt_toolkit import PromptSession
-from prompt_toolkit.completion import Completer, PathCompleter, WordCompleter
+from prompt_toolkit.completion import Completer, Completion, PathCompleter
 from prompt_toolkit.document import Document
-from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.formatted_text import HTML, FormattedText
 from prompt_toolkit.history import FileHistory
 from rich.console import Console
 from rich.table import Table
@@ -57,10 +58,10 @@ def _pdf_or_dir(path: str) -> bool:
 
 
 class _ShellCompleter(Completer):
-    """Complete command names, and filesystem paths for the /import-* commands."""
+    """Complete command names (with their args + description, like /help), the
+    flags of the command being typed, and filesystem paths for /import-*."""
 
     def __init__(self) -> None:
-        self._commands = WordCompleter([cmd for cmd, _, _ in _COMMANDS], sentence=True)
         self._pdf_paths = PathCompleter(expanduser=True, file_filter=_pdf_or_dir)
         self._dir_paths = PathCompleter(expanduser=True, only_directories=True)
         self._path_completers = {
@@ -71,6 +72,8 @@ class _ShellCompleter(Completer):
     def get_completions(self, document, complete_event):
         text = document.text_before_cursor
         stripped = text.lstrip()
+
+        # Filesystem-path completion for the /import-* commands.
         for cmd, completer in self._path_completers.items():
             prefix = cmd + " "
             if stripped.startswith(prefix):
@@ -78,7 +81,33 @@ class _ShellCompleter(Completer):
                 sub = Document(arg, cursor_position=len(arg))
                 yield from completer.get_completions(sub, complete_event)
                 return
-        yield from self._commands.get_completions(document, complete_event)
+
+        # Still typing the command token: list matching commands with args + help.
+        if " " not in stripped:
+            if not stripped.startswith("/"):
+                return
+            for cmd, args, desc in _COMMANDS:
+                if cmd.startswith(stripped):
+                    yield Completion(
+                        cmd,
+                        start_position=-len(stripped),
+                        display=f"{cmd}  {args}".rstrip(),
+                        display_meta=desc,
+                    )
+            return
+
+        # Past the command: offer that command's flags when typing a "-…" token.
+        cmd0 = stripped.split(maxsplit=1)[0]
+        spec = next(((a, d) for c, a, d in _COMMANDS if c == cmd0), None)
+        if spec is None:
+            return
+        args_hint, desc = spec
+        word = document.get_word_before_cursor(WORD=True)
+        if not word.startswith("-"):
+            return
+        for flag in re.findall(r"--[\w-]+", args_hint):
+            if flag.startswith(word):
+                yield Completion(flag, start_position=-len(word), display=flag, display_meta=desc)
 
 
 _COMPLETER = _ShellCompleter()
@@ -472,6 +501,33 @@ def _import_dir_arg(text: str) -> str | None:
     return None
 
 
+def _bottom_toolbar() -> FormattedText:
+    """Persistent usage hint shown below the prompt, updated as the user types.
+
+    Unlike the completion popup, this never disappears — so multi-arg commands
+    like `/env set <KEY> <val>` keep showing their usage past the command token.
+    """
+    from prompt_toolkit.application import get_app
+
+    text = get_app().current_buffer.text.lstrip()
+    token = text.split(maxsplit=1)[0] if text else ""
+
+    spec = next(((c, a, d) for c, a, d in _COMMANDS if c == token), None)
+    if spec is not None:
+        cmd, args, desc = spec
+        return FormattedText(
+            [("bold", cmd), ("", "  "), ("fg:ansicyan", args), ("fg:#888888", f"   — {desc}")]
+        )
+
+    if token.startswith("/"):
+        matches = [c for c, _, _ in _COMMANDS if c.startswith(token)]
+        if matches:
+            return FormattedText([("fg:#888888", "matches:  " + "   ".join(matches[:10]))])
+        return FormattedText([("fg:#888888", f"unknown command {token} — /help for the list")])
+
+    return FormattedText([("fg:#888888", "type a command — Tab to complete · /help for the list")])
+
+
 def _build_key_bindings():
     """Shell-wide key bindings.
 
@@ -506,7 +562,7 @@ def run_shell() -> None:
 
     while True:
         try:
-            line = session.prompt(_prompt())
+            line = session.prompt(_prompt(), bottom_toolbar=_bottom_toolbar)
         except KeyboardInterrupt:
             console.print()
             continue
