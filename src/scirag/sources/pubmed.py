@@ -112,17 +112,20 @@ def search(
     min_year: str = "",
     max_year: str = "",
 ) -> list[str]:
-    """esearch -> list of PMIDs."""
-    extra: dict = {}
+    """esearch -> list of PMIDs.
+
+    Year range is embedded in the query string as a [pdat] filter rather than
+    using the mindate/maxdate params — NCBI silently ignores those params when
+    sort=relevance is active.
+    """
+    term = query
     if min_year or max_year:
-        extra["datetype"] = "pdat"
-        if min_year:
-            extra["mindate"] = min_year
-        if max_year:
-            extra["maxdate"] = max_year
+        lo = min_year or "1000"
+        hi = max_year or "3000"
+        term = f'({query}) AND ("{lo}"[pdat]:"{hi}"[pdat])'
     r = _get(
         "esearch.fcgi",
-        _params(term=query, retmax=retmax, sort="relevance", **extra),
+        _params(term=term, retmax=retmax, sort="relevance"),
         timeout=30,
     )
     root = ET.fromstring(r.text)
