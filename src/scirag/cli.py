@@ -57,6 +57,10 @@ def _patch_escape(question):
         event.app.exit(result=None)
 
     app = question.application
+    # Esc leads every ANSI escape sequence (arrows, etc.), so prompt_toolkit waits
+    # ttimeoutlen (default 0.5s) to tell a lone Esc from a sequence. Shorten it so
+    # Esc-to-cancel feels instant; raise toward 0.1–0.15 if used over laggy SSH.
+    app.ttimeoutlen = 0.05
     app.key_bindings = merge_key_bindings([app.key_bindings, extra]) if app.key_bindings else extra
     return question
 
