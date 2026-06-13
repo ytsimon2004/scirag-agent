@@ -90,26 +90,30 @@ def print_article_list(arts, existing: set, pmc_map: dict) -> None:
 
 
 def _source_tag(src: str) -> str:
-    """Rich markup for a chunk's text_source: results / review / abstract."""
+    """Rich markup for a chunk's text_source: results / review / abstract / text."""
     return {
         "results": "[green]results[/]",
         "review": "[cyan]review[/]",
         "abstract": "[dim]abstract[/]",
+        "text": "[cyan]text[/]",
     }.get(src, "[dim]—[/]")
 
 
 def _origin_tag(origin: str) -> str:
-    """Rich markup for a record's origin: pubmed / biorxiv."""
+    """Rich markup for a record's origin: pubmed / biorxiv / text."""
     return {
         "pubmed": "[blue]PubMed[/]",
         "biorxiv": "[magenta]bioRxiv[/]",
+        "text": "[cyan]text[/]",
     }.get(origin, "[dim]—[/]")
 
 
 def _record_url(identifier: str, origin: str) -> str:
-    """Public URL for an indexed record: bioRxiv preprint page or PubMed page."""
+    """Public URL for an indexed record. Returns '' for free-text entries."""
     if origin == "biorxiv":
         return f"https://www.biorxiv.org/content/{identifier}"
+    if origin == "text":
+        return ""
     return f"https://pubmed.ncbi.nlm.nih.gov/{identifier}/"
 
 
@@ -601,6 +605,84 @@ def do_import(path: str) -> None:
         console.print(f"[red]No such file or directory:[/] {path}")
 
 
+def do_text_index() -> None:
+    """Interactively collect metadata + free text, then embed directly into the index."""
+    import click
+    import questionary
+    from datetime import datetime
+
+    from scirag.ingest.index import build_index, get_indexed_pmids
+    from scirag.sources.pubmed import Article
+
+    console.print("[dim]Enter metadata — press Enter to skip any field.[/]")
+
+    title = questionary.text("Title:").ask()
+    if title is None:
+        console.print("[dim]Cancelled.[/]")
+        return
+    title = title.strip()
+
+    raw_id = questionary.text("Identifier (blank = auto-generate):").ask()
+    if raw_id is None:
+        console.print("[dim]Cancelled.[/]")
+        return
+    raw_id = raw_id.strip()
+    if not raw_id:
+        identifier = f"text-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    elif not raw_id.startswith("text-"):
+        identifier = f"text-{raw_id}"
+    else:
+        identifier = raw_id
+
+    origin = questionary.text("Origin (journal / source):").ask()
+    if origin is None:
+        console.print("[dim]Cancelled.[/]")
+        return
+    origin = origin.strip()
+
+    year = questionary.text("Year:").ask()
+    if year is None:
+        console.print("[dim]Cancelled.[/]")
+        return
+    year = year.strip()
+
+    author_raw = questionary.text("Author(s) (comma-separated):").ask()
+    if author_raw is None:
+        console.print("[dim]Cancelled.[/]")
+        return
+    authors = [a.strip() for a in author_raw.split(",") if a.strip()]
+
+    existing = get_indexed_pmids()
+    if identifier in existing:
+        if not questionary.confirm(
+            f"Identifier {identifier!r} is already indexed. Overwrite?"
+        ).ask():
+            console.print("[dim]Cancelled.[/]")
+            return
+
+    console.print("[dim]Opening editor for text body (save and close to continue)…[/]")
+    text_body = click.edit(require_save=True, extension=".txt")
+    if not text_body or not text_body.strip():
+        console.print("[yellow]No text entered — cancelled.[/]")
+        return
+
+    article = Article(
+        pmid=identifier,
+        title=title or identifier,
+        abstract="",
+        full_text=text_body.strip(),
+        full_text_kind="text",
+        journal=origin,
+        year=year,
+        authors=authors,
+        source="text",
+    )
+
+    console.print(f"Embedding + indexing [cyan]{identifier}[/]…")
+    build_index([article])
+    console.print(f"[green]Indexed.[/]  identifier=[cyan]{identifier}[/]")
+
+
 _ENV_KEYS = {
     "NCBI_API_KEY": "NCBI API key — raises rate limit from 3 to 10 req/s",
     "NCBI_EMAIL": "Email sent with NCBI requests (politeness header)",
@@ -830,7 +912,7 @@ def do_status() -> None:
         origin_cell = _origin_tag(a.get("origin", "pubmed"))
         author = a.get("first_author") or "[dim]—[/]"
         url = _record_url(a["pmid"], a.get("origin", "pubmed"))
-        id_cell = f"[link={url}]{a['pmid']}[/link]"
+        id_cell = f"[link={url}]{a['pmid']}[/link]" if url else a["pmid"]
         table.add_row(id_cell, origin_cell, a["year"], author, source_cell, a["title"])
     console.print(table)
 
@@ -894,6 +976,7 @@ def do_remove(pmids: list[str]) -> None:
 def do_clear_db(force: bool = False) -> None:
     import shutil
     from scirag.projects import get_active_db_uri
+    from scirag.ingest.index import get_indexed_pmids
 
     uri = get_active_db_uri()
     db_path = Path(uri) if Path(uri).is_absolute() else Path.cwd() / uri
@@ -901,8 +984,6 @@ def do_clear_db(force: bool = False) -> None:
     if not db_path.exists():
         console.print("[yellow]Index directory does not exist — nothing to clear.[/]")
         return
-
-    from scirag.ingest.index import get_indexed_pmids
 
     n = len(get_indexed_pmids())
 
@@ -1011,6 +1092,12 @@ def import_pdf(path: str):
 def import_dir(path: str):
     """Index all PDFs in a directory (Results section only)."""
     do_import_dir(path)
+
+
+@app.command(name="text-index")
+def text_index():
+    """Index free-form text entered interactively (prompts for title, identifier, etc.)."""
+    do_text_index()
 
 
 @app.command()

@@ -38,6 +38,7 @@ _COMMANDS: list[tuple[str, str, str]] = [
     ("/llm-ui", "[--port N]", "open Chainlit web UI in browser (click-to-expand sources)"),
     ("/model", "[backend-key]", "list or switch LLM backend"),
     ("/import", "<path>", "index a PDF file, or every PDF in a directory"),
+    ("/text", "", "index free-form text (prompts for title, identifier, origin, year, author)"),
     ("/env", "[set <KEY> <val> | unset <KEY>]", "manage API keys in ~/.scirag-agent/.env"),
     ("/status", "", "show index statistics"),
     ("/remove", "[pmid ...]", "remove article(s) from the index (interactive if no args)"),
@@ -537,6 +538,11 @@ def _dispatch(line: str, session: PromptSession) -> None:
         from scirag.cli import do_import_dir
 
         do_import_dir(query)
+
+    elif cmd == "/text":
+        from scirag.cli import do_text_index
+
+        do_text_index()
 
     else:
         console.print(f"[yellow]Unknown command:[/] {cmd}   (type [cyan]/help[/])")

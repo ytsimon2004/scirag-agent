@@ -59,6 +59,8 @@ class Article:
     def url(self) -> str:
         if self.source == "biorxiv":
             return f"https://www.biorxiv.org/content/{self.doi}"
+        if self.source == "text":
+            return ""
         return f"https://pubmed.ncbi.nlm.nih.gov/{self.pmid}/"
 
     @property

@@ -34,10 +34,14 @@ def origin_of(identifier: str) -> str:
     """Infer a record's source from its primary key.
 
     PubMed PMIDs are purely numeric; bioRxiv DOIs (e.g. 10.1101/…, 10.64898/…)
-    contain a slash. This lets us distinguish origins without storing an extra
-    metadata field — keeping the LanceDB struct schema backward-compatible.
+    contain a slash; free-text entries use a "text-" prefix.
     """
-    return "biorxiv" if "/" in (identifier or "") else "pubmed"
+    ident = identifier or ""
+    if "/" in ident:
+        return "biorxiv"
+    if ident.startswith("text-"):
+        return "text"
+    return "pubmed"
 
 
 def build_index(articles: list[Article]) -> VectorStoreIndex:
@@ -86,7 +90,7 @@ def get_indexed_articles() -> list[dict]:
 
         seen: set[str] = set()
         articles: list[dict] = []
-        for pmid, title, year, first_author, source in zip(
+        for pmid, title, year, first_author, text_source in zip(
             metadata_col.field("pmid").to_pylist(),
             metadata_col.field("title").to_pylist(),
             metadata_col.field("year").to_pylist(),
@@ -101,7 +105,7 @@ def get_indexed_articles() -> list[dict]:
                         "title": title or "",
                         "year": year or "",
                         "first_author": first_author or "",
-                        "text_source": source or "",
+                        "text_source": text_source or "",
                         "origin": origin_of(pmid),
                     }
                 )
