@@ -30,6 +30,16 @@ def _vector_store() -> LanceDBVectorStore:
     )
 
 
+def origin_of(identifier: str) -> str:
+    """Infer a record's source from its primary key.
+
+    PubMed PMIDs are purely numeric; bioRxiv DOIs (e.g. 10.1101/…, 10.64898/…)
+    contain a slash. This lets us distinguish origins without storing an extra
+    metadata field — keeping the LanceDB struct schema backward-compatible.
+    """
+    return "biorxiv" if "/" in (identifier or "") else "pubmed"
+
+
 def build_index(articles: list[Article]) -> VectorStoreIndex:
     """Chunk + embed + persist a batch of articles. Idempotent-append."""
     idx = pipeline_cfg()["index"]
@@ -51,11 +61,13 @@ def get_indexed_pmids() -> set[str]:
 
 
 def get_indexed_articles() -> list[dict]:
-    """Return deduplicated article metadata (pmid, title, year, first_author, text_source).
+    """Return deduplicated article metadata (pmid, title, year, first_author, text_source, origin).
 
-    `text_source` is "results" when the chunk came from full-text Results, else
-    "abstract". `first_author` may be "" for articles indexed before authors were
-    stored, or for PDF imports without resolved metadata.
+    `pmid` holds a PubMed ID for PubMed records and a DOI for bioRxiv preprints
+    (the shared primary key). `origin` ("pubmed" / "biorxiv") is inferred from that
+    key via origin_of(). `text_source` is "results" when the chunk came from
+    full-text Results, else "abstract". `first_author` may be "" for articles
+    indexed before authors were stored, or for PDF imports without resolved metadata.
     """
     import lancedb
     from scirag.projects import get_active_db_uri
@@ -90,6 +102,7 @@ def get_indexed_articles() -> list[dict]:
                         "year": year or "",
                         "first_author": first_author or "",
                         "text_source": source or "",
+                        "origin": origin_of(pmid),
                     }
                 )
         return articles

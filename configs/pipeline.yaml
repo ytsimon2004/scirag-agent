@@ -16,3 +16,7 @@ sources:
   pubmed:
     default_retmax: 25
     # NCBI politeness: <=3 req/s without key, 10 with NCBI_API_KEY in .env
+  biorxiv:
+    default_retmax: 25
+    default_days_back: 180   # keyword search scans this many days back (no keyword API endpoint)
+    # bioRxiv API needs no key; client sleeps 0.5s between interval pages

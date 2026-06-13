@@ -1,9 +1,9 @@
-"""PDF ingestion: resolve a PDF to its PubMed record + isolate the Results section.
+"""PDF ingestion: resolve a PDF to its source record + isolate the Results section.
 
-A PDF is only imported if it can be resolved to a real PubMed record (so the
-index never holds guessed/garbage metadata). Resolution order: PMID (numeric
-filename) -> DOI -> title search. If none resolves, the PDF is skipped and a
-warning points the user at a PubMed URL to look it up manually.
+A PDF is only imported if it can be resolved to a real record (so the index never
+holds guessed/garbage metadata). Resolution order: PMID (numeric filename) -> DOI
+-> title search (all PubMed) -> bioRxiv DOI (preprints aren't in PubMed). If none
+resolves, the PDF is skipped and a warning points the user at a PubMed URL.
 
 Also used by the Unpaywall fallback in sources/pubmed.py (`extract_text_from_pdf`,
 `extract_results_section`).
@@ -42,20 +42,27 @@ _TITLE_SKIP_RE = re.compile(
 # Optional section numbering before a heading: "3.", "3 ", "3.1.", "III." …
 _SECTION_NUM = r"(?:\d{1,2}(?:\.\d{1,2})*\.?\s+|[IVX]{1,4}\.\s+)?"
 
+# Optional trailing line/page number after a heading. bioRxiv/medRxiv manuscripts
+# number every line, so a heading extracts as e.g. "RESULTS 83" / "DISCUSSION 399".
+_LINE_NO = r"(?:\s+\d{1,4})?"
+
 # Headings that start the Results section (and variants like "Results and Discussion")
 _RESULTS_RE = re.compile(
-    rf"(?m)^\s*{_SECTION_NUM}results?(\s+and\s+(discussion|analysis|interpretation))?\s*[:\.]?\s*$",
+    rf"(?m)^\s*{_SECTION_NUM}results?(\s+and\s+(discussion|analysis|interpretation))?"
+    rf"\s*[:\.]?{_LINE_NO}\s*$",
     re.IGNORECASE,
 )
 
 # Back-matter heading (on its own line) marking where a review's body ends.
-_BACK_MATTER_RE = re.compile(r"(?im)^\s*(references|bibliography|acknowledgements?)\s*:?\s*$")
+_BACK_MATTER_RE = re.compile(
+    rf"(?im)^\s*(references|bibliography|acknowledgements?)\s*:?{_LINE_NO}\s*$"
+)
 
 # Headings that end the Results section
 _END_SECTION_RE = re.compile(
     rf"(?m)^\s*{_SECTION_NUM}(discussion|methods?|materials?\s*and\s*methods?|"
-    r"experimental(\s+procedures?)?|conclusion|references?|"
-    r"acknowledgements?|supplementary|bibliography)\s*[:\.]?\s*$",
+    rf"experimental(\s+procedures?)?|conclusion|references?|"
+    rf"acknowledgements?|supplementary|bibliography)\s*[:\.]?{_LINE_NO}\s*$",
     re.IGNORECASE,
 )
 
@@ -90,6 +97,11 @@ def _extract_doi(text: str) -> str:
         return ""
     # Strip trailing sentence/line punctuation that the regex may have swallowed.
     doi = m.group(0).rstrip(".,;)")
+    # bioRxiv/medRxiv DOIs (…/YYYY.MM.DD.NNNNNN) pick up watermark text in the
+    # extracted layer (e.g. "…661247doi:"); truncate to the canonical form.
+    preprint = re.match(r"10\.\d{4,9}/\d{4}\.\d{2}\.\d{2}\.\d+", doi)
+    if preprint:
+        return preprint.group(0)
     # eLife's per-component suffix (…NNNNN.00N) isn't what PubMed indexes.
     elife = _ELIFE_COMPONENT_RE.match(doi)
     return elife.group(1) if elife else doi
@@ -169,6 +181,24 @@ def _resolve_via_title(title: str) -> Article | None:
     return None
 
 
+def _resolve_via_biorxiv(doi: str) -> Article | None:
+    """Resolve a bioRxiv preprint DOI to an Article via the bioRxiv API, or None.
+
+    Used as a fallback when a PDF doesn't resolve to PubMed — preprints aren't in
+    PubMed, but the bioRxiv API knows them by DOI. The DOI lands in the Article's
+    `pmid` slot with source="biorxiv", matching the /bindex path.
+    """
+    if not doi:
+        return None
+    try:
+        from scirag.sources import biorxiv
+
+        arts = biorxiv.fetch([doi])
+    except Exception:
+        return None
+    return arts[0] if arts else None
+
+
 def _warn_unresolved(path: Path, doi: str, title: str) -> None:
     if doi:
         term, detail = doi, f"DOI {doi}"
@@ -190,11 +220,12 @@ def _warn_unresolved(path: Path, doi: str, title: str) -> None:
 
 
 def load_pdf_as_article(path: Path) -> Article | None:
-    """Resolve a PDF to its PubMed record, with the PDF's Results text grafted on.
+    """Resolve a PDF to its source record, with the PDF's Results text grafted on.
 
-    Resolution order: PMID (numeric filename) -> DOI -> title search. Returns
-    None (and warns with a PubMed lookup URL) when none resolves, so unresolved
-    PDFs are skipped rather than indexed with guessed metadata.
+    Resolution order: PMID (numeric filename) -> DOI -> title (all PubMed) ->
+    bioRxiv DOI. Returns None (and warns with a PubMed lookup URL) when none
+    resolves, so unresolved PDFs are skipped rather than indexed with guessed
+    metadata.
     """
     reader = pypdf.PdfReader(str(path))
     text = "\n".join(page.extract_text() or "" for page in reader.pages)
@@ -211,10 +242,14 @@ def load_pdf_as_article(path: Path) -> Article | None:
         resolved = _resolve_via_doi(doi)
     if resolved is None and candidate_title:
         resolved = _resolve_via_title(candidate_title)
+    # bioRxiv preprints aren't in PubMed — fall back to the bioRxiv API by DOI.
+    if resolved is None and doi:
+        resolved = _resolve_via_biorxiv(doi)
 
     if resolved is not None:
         resolved.full_text = results
-        # Reviews have no Results section — index the whole body instead.
+        # Reviews have no Results section — index the whole body instead. Research
+        # articles and preprints stay Results-only (abstract if none was found).
         if not results and resolved.is_review:
             body = _strip_back_matter(text)
             if body:

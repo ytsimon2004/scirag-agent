@@ -50,9 +50,15 @@ class Article:
     # How to label full_text in metadata: "results" (Results section) or "review"
     # (whole-body text of a review article, which has no Results section).
     full_text_kind: str = "results"
+    # Origin of the record: "pubmed" or "biorxiv". For bioRxiv preprints the DOI
+    # is stored in the `pmid` slot (the system-wide primary key), so dedup, /show,
+    # /remove, and [id] citations work unchanged.
+    source: str = "pubmed"
 
     @property
     def url(self) -> str:
+        if self.source == "biorxiv":
+            return f"https://www.biorxiv.org/content/{self.doi}"
         return f"https://pubmed.ncbi.nlm.nih.gov/{self.pmid}/"
 
     @property

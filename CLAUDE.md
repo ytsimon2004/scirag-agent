@@ -30,6 +30,10 @@ one LiteLLM router, selectable per agent.
 - `src/scireg/config.py` — loads `configs/models.yaml` + `configs/pipeline.yaml` + `.env`.
 - `src/scireg/llm/router.py` — `complete(agent, messages)`; the ONLY place LLMs are called.
 - `src/scireg/sources/pubmed.py` — NCBI E-utilities client (`Article` dataclass).
+- `src/scireg/sources/biorxiv.py` — bioRxiv source; keyword search via Europe PMC
+  (the bioRxiv API has no search endpoint), direct-DOI metadata + full-text JATS via
+  the bioRxiv API. Builds the same `Article` with the preprint DOI in the `pmid` slot
+  and `source="biorxiv"`.
 - `src/scireg/ingest/index.py` — LlamaIndex -> LanceDB (embedded, at `data/lancedb`).
 - `src/scireg/retrieval/retriever.py` — hybrid dense + BM25 with RRF fusion.
 - `src/scireg/neuro/entities.py` — neuro entity extraction + query expansion (extension point).
@@ -39,9 +43,11 @@ one LiteLLM router, selectable per agent.
 
 ## Run
 ```
-uv run scireg search "grid cells entorhinal cortex"      # raw PubMed, no LLM
-uv run scireg index  "hippocampal place cells" --retmax 30
-uv run scireg ask    "How do place cells remap across environments?"
+uv run scireg search  "grid cells entorhinal cortex"     # raw PubMed, no LLM
+uv run scireg index   "hippocampal place cells" --retmax 30
+uv run scireg bsearch "place cells remapping"            # bioRxiv preprints (last 180 days)
+uv run scireg bindex  "place cells remapping" --full-text
+uv run scireg ask     "How do place cells remap across environments?"
 uv run python -m scireg.mcp_server.server                 # MCP server (needs --extra mcp)
 ```
 
@@ -50,9 +56,14 @@ uv run python -m scireg.mcp_server.server                 # MCP server (needs --
   `litellm`/provider SDKs directly. Add/swap models in `configs/models.yaml`, not in code.
 - Agent role names in `models.yaml` (`planner`, `retriever`, `neuro_entity`,
   `synthesizer`, `critic`) are the contract between config and code.
-- Synthesis must cite every claim with `[PMID]` markers from source metadata.
-- PubMed is the data source; the MCP server is how agents reach it. Don't bypass
-  `sources/` with ad-hoc HTTP calls elsewhere.
+- Synthesis must cite every claim with the `[id]` marker from source metadata —
+  a PMID for PubMed records, a DOI (`10.1101/…`) for bioRxiv preprints. Both live
+  in the metadata `pmid` field, which is the system-wide primary key (dedup,
+  `/show`, `/remove`, citations).
+- PubMed and bioRxiv are the data sources; the MCP server is how agents reach them.
+  Don't bypass `sources/` with ad-hoc HTTP calls elsewhere. The bioRxiv API has no
+  keyword-search endpoint, so `biorxiv.search` queries Europe PMC
+  (`SRC:PPR AND PUBLISHER:"bioRxiv"`) for relevance-ranked results.
 
 ## Roadmap (multi-agent buildout)
 Current pipeline is linear (`extract_entities -> retrieve -> synthesize`). Next:

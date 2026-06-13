@@ -21,6 +21,16 @@ console = Console()
 _COMMANDS: list[tuple[str, str, str]] = [
     ("/search", "<query> [--retmax N]", "search PubMed, show full-text availability"),
     ("/index", "<query> [--retmax N] [--full-text]", "interactive fetch + select + index"),
+    (
+        "/bsearch",
+        "<query> [--retmax N] [--days-back N]",
+        "keyword search over recent bioRxiv preprints",
+    ),
+    (
+        "/bindex",
+        "<query> [--retmax N] [--days-back N] [--full-text]",
+        "interactive fetch + select + index bioRxiv",
+    ),
     ("/retrieve", "<query>", "query local index (no LLM)"),
     ("/show", "<pmid>", "print a paper's stored abstract/results text"),
     ("/llm", "[<question>] [--reset]", "RAG answer; bare /llm = sticky conversation mode"),
@@ -358,6 +368,33 @@ def _dispatch(line: str, session: PromptSession) -> None:
         do_index(
             query,
             retmax=int(flags.get("retmax", 25)),
+            full_text="full-text" in flags or "full_text" in flags,
+        )
+
+    elif cmd == "/bsearch":
+        if not query:
+            console.print("[yellow]Usage:[/] /bsearch <query> [--retmax N] [--days-back N]")
+            return
+        from scirag.cli import do_bsearch
+
+        do_bsearch(
+            query,
+            retmax=int(flags.get("retmax", 15)),
+            days_back=int(flags.get("days-back", flags.get("days_back", 180))),
+        )
+
+    elif cmd == "/bindex":
+        if not query:
+            console.print(
+                "[yellow]Usage:[/] /bindex <query> [--retmax N] [--days-back N] [--full-text]"
+            )
+            return
+        from scirag.cli import do_bindex
+
+        do_bindex(
+            query,
+            retmax=int(flags.get("retmax", 25)),
+            days_back=int(flags.get("days-back", flags.get("days_back", 180))),
             full_text="full-text" in flags or "full_text" in flags,
         )
 

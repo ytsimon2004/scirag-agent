@@ -31,6 +31,28 @@ def search_pubmed(query: str, retmax: int = 25) -> list[dict]:
 
 
 @mcp.tool()
+def search_biorxiv(query: str, retmax: int = 25, days_back: int = 180) -> list[dict]:
+    """Keyword-search recent bioRxiv preprints (title/abstract match over a date window).
+
+    bioRxiv has no keyword API endpoint, so this scans the last `days_back` days.
+    `doi` is the preprint's identifier (used in place of a PMID).
+    """
+    from scirag.sources import biorxiv
+
+    return [
+        {
+            "doi": a.doi,
+            "title": a.title,
+            "abstract": a.abstract,
+            "year": a.year,
+            "url": a.url,
+            "source": a.source,
+        }
+        for a in biorxiv.search_and_fetch(query, days_back=days_back, retmax=retmax)
+    ]
+
+
+@mcp.tool()
 def ask_index(query: str) -> str:
     """Retrieve from the local index and return a cited answer."""
     from scirag.agents.pipeline import prepare_answer

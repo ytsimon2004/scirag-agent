@@ -94,6 +94,26 @@ def _source_tag(src: str) -> str:
     }.get(src, "[dim]—[/]")
 
 
+def _origin_tag(origin: str) -> str:
+    """Rich markup for a record's origin: pubmed / biorxiv."""
+    return {
+        "pubmed": "[blue]PubMed[/]",
+        "biorxiv": "[magenta]bioRxiv[/]",
+    }.get(origin, "[dim]—[/]")
+
+
+def _authors_short(authors: list[str]) -> str:
+    """Compact byline: first author … last author (the last is usually senior/
+    corresponding). One or two authors are shown in full."""
+    if not authors:
+        return ""
+    if len(authors) == 1:
+        return authors[0]
+    if len(authors) == 2:
+        return f"{authors[0]}, {authors[1]}"
+    return f"{authors[0]} … {authors[-1]}"
+
+
 def print_retrieve_results(nodes) -> None:
     if not nodes:
         console.print("[yellow]No results — have you run /index yet?[/]")
@@ -181,6 +201,9 @@ def do_index(query: str, retmax: int = 25, full_text: bool = False) -> None:
             parts += [("", "  [" if i == 0 else ", "), (style, tag)]
         if tags:
             parts += [("", "]")]
+        authors = _authors_short(a.authors)
+        if authors:
+            parts += [("", "\n     "), ("fg:#6c6c6c", authors)]
         parts += [("", "\n     "), ("fg:ansiblue", a.url)]
         return parts
 
@@ -238,6 +261,112 @@ def do_index(query: str, retmax: int = 25, full_text: bool = False) -> None:
         return
 
     console.print(f"Embedding + indexing [cyan]{len(new_arts)}[/] article(s)...")
+    build_index(new_arts)
+    console.print("[green]Indexed.[/]")
+
+
+def do_bsearch(query: str, retmax: int = 15, days_back: int = 180) -> None:
+    """Keyword search over recent bioRxiv preprints (title/abstract match)."""
+    from scirag.sources import biorxiv
+
+    console.print(f"[dim]Searching bioRxiv via Europe PMC (last {days_back} days)…[/]")
+    arts = biorxiv.search_and_fetch(query, days_back=days_back, retmax=retmax)
+    if not arts:
+        console.print("[yellow]No results.[/] Try other terms or a wider [cyan]--days-back[/].")
+        return
+
+    console.print()
+    for a in arts:
+        abst_tag = "[green]ABS✓[/]" if a.abstract else "[red]ABS✗[/]"
+        category = a.pub_types[0] if a.pub_types else ""
+        console.print(
+            f"[bold cyan][link={a.url}]{a.doi}[/link][/] {a.title[:70]} [dim]({a.year})[/]\n"
+            f"  {abst_tag}  [magenta]bioRxiv[/]  [dim]{category}[/]\n"
+            f"  [dim][link={a.url}]{a.url}[/link][/]"
+        )
+    console.print(f"\n[green]{len(arts)} preprint(s)[/]  —  source: bioRxiv")
+
+
+def do_bindex(query: str, retmax: int = 25, days_back: int = 180, full_text: bool = False) -> None:
+    """Fetch, preview, select, and index bioRxiv preprints interactively."""
+    import questionary
+    from scirag.ingest.index import build_index, get_indexed_pmids
+    from scirag.sources import biorxiv
+
+    console.print(f"[dim]Searching bioRxiv via Europe PMC (last {days_back} days)…[/]")
+    arts = biorxiv.search_and_fetch(query, days_back=days_back, retmax=retmax)
+    if not arts:
+        console.print("[yellow]No results.[/] Try other terms or a wider [cyan]--days-back[/].")
+        return
+
+    existing = get_indexed_pmids()  # holds DOIs for preprints, PMIDs for PubMed
+
+    def _choice_title(a) -> list:
+        parts = []
+        if a.pmid in existing:
+            parts += [("fg:ansiyellow", "[indexed] ")]
+        parts += [
+            ("fg:ansicyan bold", a.doi),
+            ("", f"  {a.title}  "),
+            ("fg:ansibrightblack", f"({a.year})"),
+        ]
+        category = a.pub_types[0] if a.pub_types else ""
+        if category:
+            parts += [("", "  ["), ("fg:ansimagenta", category), ("", "]")]
+        authors = _authors_short(a.authors)
+        if authors:
+            parts += [("", "\n     "), ("fg:#6c6c6c", authors)]
+        parts += [("", "\n     "), ("fg:ansiblue", a.url)]
+        return parts
+
+    choices = [
+        questionary.Choice(title=_choice_title(a), value=a, checked=(a.pmid not in existing))
+        for a in arts
+    ]
+
+    import questionary.prompts.common as _qpc
+
+    _qpc.INDICATOR_SELECTED = "✔"
+    _qpc.INDICATOR_UNSELECTED = " "
+
+    selected = _patch_escape(
+        questionary.checkbox(
+            "Select preprints to index  (space = toggle, a = all, i = invert, enter = confirm):",
+            choices=choices,
+        )
+    ).ask()
+
+    if not selected:
+        console.print("[yellow]Nothing selected.[/]")
+        return
+
+    console.print()
+
+    if full_text:
+        console.print("Fetching full text (Results section)...")
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            biorxiv.enrich_with_fulltext(selected)
+        n = sum(1 for a in selected if a.full_text)
+        console.print(f"Full text retrieved for [cyan]{n}[/] / {len(selected)} preprint(s).")
+        missing = [a for a in selected if not a.full_text]
+        if missing:
+            console.print(
+                f"\n[yellow]{len(missing)} preprint(s) without full text — download manually:[/]"
+            )
+            for a in missing:
+                console.print(f"  [link={a.url}]{a.url}[/link]")
+            console.print()
+
+    new_arts = [a for a in selected if a.pmid not in existing]
+    already = len(selected) - len(new_arts)
+    if already:
+        console.print(f"[dim]Skipping {already} already-indexed preprint(s).[/]")
+    if not new_arts:
+        console.print("[green]Nothing new to index.[/]")
+        return
+
+    console.print(f"Embedding + indexing [cyan]{len(new_arts)}[/] preprint(s)...")
     build_index(new_arts)
     console.print("[green]Indexed.[/]")
 
@@ -419,7 +548,11 @@ def do_import_pdf(path: str) -> None:
             f"[yellow]Not imported:[/] {p.name} could not be resolved to a PubMed record."
         )
         return
-    console.print(f"Loaded [cyan]{p.name}[/] → PMID={article.pmid}, title={article.title[:60]}")
+    id_label = "DOI" if article.source == "biorxiv" else "PMID"
+    console.print(
+        f"Loaded [cyan]{p.name}[/] → {id_label}={article.pmid} "
+        f"[dim]({article.source})[/], title={article.title[:55]}"
+    )
     console.print("Embedding + indexing...")
     build_index([article])
     console.print("[green]Indexed.[/]")
@@ -664,15 +797,17 @@ def do_status() -> None:
     console.print(f"Index: [cyan]{len(articles)}[/] unique article(s) stored.\n")
 
     table = Table(box=None, padding=(0, 1), show_header=True, header_style="bold dim")
-    table.add_column("PMID", style="cyan", no_wrap=True)
+    table.add_column("PMID / DOI", style="cyan", no_wrap=True)
+    table.add_column("Origin", no_wrap=True)
     table.add_column("Year", style="dim", no_wrap=True)
     table.add_column("First author", no_wrap=True)
-    table.add_column("Source", no_wrap=True)
+    table.add_column("Text", no_wrap=True)
     table.add_column("Title")
     for a in sorted(articles, key=lambda x: x["year"], reverse=True):
         source_cell = _source_tag(a.get("text_source", ""))
+        origin_cell = _origin_tag(a.get("origin", "pubmed"))
         author = a.get("first_author") or "[dim]—[/]"
-        table.add_row(a["pmid"], a["year"], author, source_cell, a["title"])
+        table.add_row(a["pmid"], origin_cell, a["year"], author, source_cell, a["title"])
     console.print(table)
 
     n_full = sum(1 for a in articles if a.get("text_source") in ("results", "review"))
@@ -776,6 +911,18 @@ def search(query: str, retmax: int = 15):
 def index(query: str, retmax: int = 25, full_text: bool = False):
     """Fetch, preview, select, and index PubMed articles interactively."""
     do_index(query, retmax, full_text)
+
+
+@app.command()
+def bsearch(query: str, retmax: int = 15, days_back: int = 180):
+    """Keyword search over recent bioRxiv preprints."""
+    do_bsearch(query, retmax, days_back)
+
+
+@app.command()
+def bindex(query: str, retmax: int = 25, days_back: int = 180, full_text: bool = False):
+    """Fetch, preview, select, and index bioRxiv preprints interactively."""
+    do_bindex(query, retmax, days_back, full_text)
 
 
 @app.command()
