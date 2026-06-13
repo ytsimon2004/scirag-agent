@@ -106,6 +106,13 @@ def _origin_tag(origin: str) -> str:
     }.get(origin, "[dim]—[/]")
 
 
+def _record_url(identifier: str, origin: str) -> str:
+    """Public URL for an indexed record: bioRxiv preprint page or PubMed page."""
+    if origin == "biorxiv":
+        return f"https://www.biorxiv.org/content/{identifier}"
+    return f"https://pubmed.ncbi.nlm.nih.gov/{identifier}/"
+
+
 def _authors_short(authors: list[str]) -> str:
     """Compact byline: first author … last author (the last is usually senior/
     corresponding). One or two authors are shown in full."""
@@ -822,7 +829,9 @@ def do_status() -> None:
         source_cell = _source_tag(a.get("text_source", ""))
         origin_cell = _origin_tag(a.get("origin", "pubmed"))
         author = a.get("first_author") or "[dim]—[/]"
-        table.add_row(a["pmid"], origin_cell, a["year"], author, source_cell, a["title"])
+        url = _record_url(a["pmid"], a.get("origin", "pubmed"))
+        id_cell = f"[link={url}]{a['pmid']}[/link]"
+        table.add_row(id_cell, origin_cell, a["year"], author, source_cell, a["title"])
     console.print(table)
 
     n_full = sum(1 for a in articles if a.get("text_source") in ("results", "review"))
