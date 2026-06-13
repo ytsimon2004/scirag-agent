@@ -62,7 +62,7 @@ ollama pull bge-m3                         # embeddings (~1.2 GB)
 
 - **Local (default), via Ollama** — no API key:
   ```
-  ollama pull qwen2.5:14b-instruct-q4_K_M  # ~9 GB
+  ollama pull qwen3:14b-q4_K_M             # ~9 GB
   ```
 - **`claude-code` / `codex`** — reuse your existing Claude Code or OpenAI Codex
   CLI login (no API key, no model download); select with `/model claude-code`.
@@ -100,7 +100,7 @@ scirag[rsc] ❯ /delete-project rsc   # delete (asks to confirm)
 
 ### 2 — Choose a model
 
-The default is local **Qwen2.5-14B** via Ollama — no API key needed.
+The default is local **Qwen3-14B** via Ollama — no API key needed.
 
 ```
 scirag[rsc] ❯ /model                 # list backends, mark the active one
@@ -109,9 +109,9 @@ scirag[rsc] ❯ /model claude-sonnet   # switch (or use arrow keys with bare /mo
 
 | Key | Model | Needs |
 |---|---|---|
-| `local-qwen14b` | `ollama/qwen2.5:14b-instruct-q4_K_M` | — (default) |
-| `local-llama8b` | `ollama/llama3.1:8b-instruct-q4_K_M` | — |
-| `local-deepseek` | `ollama/deepseek-r1:14b` | — |
+| `local-qwen3-14b` | `ollama/qwen3:14b-q4_K_M` | — (default) |
+| `local-llama4-scout` | `ollama/llama4:17b-scout-16e-instruct-q4_K_M` | — |
+| `local-deepseek-r1-32b` | `ollama/deepseek-r1:32b-qwen-distill-q4_K_M` | — |
 | `claude-sonnet` / `claude-opus` | `anthropic/claude-sonnet-4-6` / `-opus-4-8` | `ANTHROPIC_API_KEY` |
 | `openai-gpt4o` / `openai-o3` | `openai/gpt-4o` / `openai/o3` | `OPENAI_API_KEY` |
 | `claude-code` / `codex` | local `claude -p` / `codex` CLI subprocess | that CLI installed + signed in |
@@ -222,14 +222,15 @@ When automatic full-text retrieval can't reach a paper, import PDFs you've
 downloaded:
 
 ```
-scirag[rsc] ❯ /import-pdf ~/Downloads/paper.pdf
-scirag[rsc] ❯ /import-dir ~/Downloads/papers/        # all PDFs in a folder
+scirag[rsc] ❯ /import ~/Downloads/paper.pdf          # single PDF
+scirag[rsc] ❯ /import ~/Downloads/papers/            # all PDFs in a folder
 ```
 
-Each PDF is resolved to a PubMed record by **PMID** (numeric filename), **DOI**,
-or **title search**. Unresolved PDFs are *not* imported — scirag prints a PubMed
-lookup URL; find the PMID, rename the file to `<PMID>.pdf`, and re-import. Path
-arguments tab-complete, and `→` descends into a directory.
+`/import` routes automatically — pass a file or a directory. Each PDF is resolved
+to a PubMed record by **PMID** (numeric filename), **DOI**, or **title search**.
+Unresolved PDFs are *not* imported — scirag prints a PubMed lookup URL; find the
+PMID, rename the file to `<PMID>.pdf`, and re-import. Path arguments tab-complete,
+and `→` descends into a directory.
 
 ### Web UI
 
@@ -249,15 +250,15 @@ browser, or mix freely.
 
 | Command | Description |
 |---|---|
-| `/index <query> [--retmax N] [--full-text]` | Fetch, select, and embed PubMed articles |
-| `/bindex <query> [--retmax N] [--days-back N] [--full-text]` | Fetch, select, and embed bioRxiv preprints |
+| `/index <query> [--retmax N] [--full-text] [--year-from YYYY] [--year-to YYYY]` | Fetch, select, and embed PubMed articles |
+| `/bindex <query> [--retmax N] [--days-back N] [--full-text] [--year-from YYYY] [--year-to YYYY]` | Fetch, select, and embed bioRxiv preprints |
 | `/text` | Index free-form text (prompts for metadata + opens editor) |
 | `/retrieve <query>` | Show retrieved chunks for a query (no LLM) |
 | `/show <pmid>` | Print a paper's stored abstract/results/review text |
 | `/llm [<question>] [--reset]` | RAG answer; bare `/llm` = conversation mode |
 | `/llm-ui [--port N]` | Open the Chainlit web UI |
 | `/model [backend-key]` | List or switch LLM backend |
-| `/import-pdf <path>` / `/import-dir <path>` | Import PDF(s), resolved to PubMed |
+| `/import <path>` | Import a PDF file or directory of PDFs, resolved to PubMed |
 | `/env [set\|unset <KEY> <val>]` | Manage API keys in `~/.scirag-agent/.env` |
 | `/status` | Index listing + statistics |
 | `/remove [pmid …]` | Remove article(s) from the index |
@@ -292,11 +293,11 @@ configs/
 
 | Source | Used for | Requires |
 |---|---|---|
-| PMC full text (Results) | research articles | open-access in PMC |
-| Open-access PDF (Results) | research articles | DOI + a legal free copy (Unpaywall) |
-| Review whole-body | review articles | resolved as a PubMed `Review` |
-| Manual PDF import | anything resolvable | `/import-pdf` / `/import-dir` |
-| Abstract | fallback | always available from PubMed |
+| PMC full text (Results section) | PubMed research articles | open-access in PMC |
+| bioRxiv JATS XML (Results section) | bioRxiv preprints | `--full-text` with `/bindex` |
+| Review whole-body | PubMed review articles | resolved as a PubMed `Review` |
+| Manual PDF import | anything resolvable to a PMID/DOI | `/import <path>` |
+| Free-form text | notes, book chapters, any text | `/text` |
 
 For papers with no retrievable full text, scirag falls back to the abstract; for
 PDFs that can't be matched to PubMed at all, it skips them and prints the lookup URL.
