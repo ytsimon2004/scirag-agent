@@ -3,20 +3,20 @@
 # Backend strings are LiteLLM model ids (provider/model).
 
 agents:
-  planner: local-qwen14b
-  retriever: local-qwen14b
-  synthesizer: local-qwen14b
-  critic: local-qwen14b
+  planner: local-qwen3-14b
+  retriever: local-qwen3-14b
+  synthesizer: local-qwen3-14b
+  critic: local-qwen3-14b
 
 backends:
-  local-qwen14b:
-    model: "ollama/qwen2.5:14b-instruct-q4_K_M"
+  local-qwen3-14b:
+    model: "ollama/qwen3:14b-q4_K_M"          # ~9 GB — hybrid thinking, default
     api_base: "http://localhost:11434"
-  local-llama8b:
-    model: "ollama/llama3.1:8b-instruct-q4_K_M"
+  local-llama4-scout:
+    model: "ollama/llama4:17b-scout-16e-instruct-q4_K_M"  # ~10 GB
     api_base: "http://localhost:11434"
-  local-deepseek:
-    model: "ollama/deepseek-r1:14b"
+  local-deepseek-r1-32b:
+    model: "ollama/deepseek-r1:32b-qwen-distill-q4_K_M"   # ~18 GB — strong reasoning
     api_base: "http://localhost:11434"
   claude-code:
     model: "claude-code"                   # uses `claude -p` subprocess (Plus subscription)
