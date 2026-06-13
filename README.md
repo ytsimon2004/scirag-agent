@@ -8,12 +8,14 @@ dense + BM25 retrieval) and **LiteLLM** (one router across local and frontier
 LLMs). Runs fully local via Ollama, or with frontier models (Claude / OpenAI) —
 selectable per agent in `configs/models.yaml`.
 
-Two principles shape the index:
+The index accepts three kinds of content:
 
-- **Every answer is grounded and cited** with `[PMID]` markers from the sources.
-- **Nothing is indexed that can't be resolved to a real PubMed record** — imported
-  PDFs are matched to PubMed (by PMID / DOI / title) or skipped, so the index
-  never holds guessed metadata.
+- **PubMed articles** — fetched by keyword search and indexed with full-text when
+  available (Results section via PMC, or open-access PDF via Unpaywall).
+- **bioRxiv preprints** — searched via Europe PMC and indexed with full JATS XML
+  when available.
+- **Free-form text** — paste any text directly into the index with `/text`
+  (prompted for title, identifier, origin, year, author).
 
 ---
 
@@ -110,6 +112,7 @@ Keys are stored in `~/.scirag-agent/.env` — never in the repo.
 
 ### 1 — Index papers
 
+**PubMed:**
 ```
 scirag[rsc] ❯ /index "anterior posterior retrosplenial cortex" --retmax 10 --full-text
 ```
@@ -121,6 +124,22 @@ selected paper is enriched to its deepest available text:
 - **research articles** → the **Results section** (PMC, else an open-access PDF),
 - **review articles** → the **whole body** (reviews have no Results section),
 - otherwise → the **abstract**.
+
+**bioRxiv preprints:**
+```
+scirag[rsc] ❯ /bindex "place cells remapping" --days-back 90 --full-text
+```
+
+Searches bioRxiv via Europe PMC (no keyword API on bioRxiv itself), shows the same
+checkbox flow, and fetches full JATS XML when available.
+
+**Free-form text:**
+```
+scirag[rsc] ❯ /text
+```
+
+Prompts for title, identifier, origin, year, and author(s), then opens `$EDITOR`
+for the body. Useful for notes, book chapters, or anything not in PubMed/bioRxiv.
 
 ### 2 — Check what's stored
 
@@ -188,15 +207,6 @@ or **title search**. Unresolved PDFs are *not* imported — scirag prints a PubM
 lookup URL; find the PMID, rename the file to `<PMID>.pdf`, and re-import. Path
 arguments tab-complete, and `→` descends into a directory.
 
-### Search PubMed (no index, no LLM)
-
-```
-scirag[rsc] ❯ /search "retrosplenial cortex lesion" --retmax 10
-```
-
-Discovery only — shows availability badges (`PMC✓` full text, `DOI✓` open-access
-PDF, `ABS✓` abstract) so you can see what `/index --full-text` will be able to fetch.
-
 ### Web UI
 
 ```
@@ -215,8 +225,9 @@ browser, or mix freely.
 
 | Command | Description |
 |---|---|
-| `/search <query> [--retmax N]` | PubMed search with availability badges |
-| `/index <query> [--retmax N] [--full-text]` | Fetch, preview, select, embed |
+| `/index <query> [--retmax N] [--full-text]` | Fetch, select, and embed PubMed articles |
+| `/bindex <query> [--retmax N] [--days-back N] [--full-text]` | Fetch, select, and embed bioRxiv preprints |
+| `/text` | Index free-form text (prompts for metadata + opens editor) |
 | `/retrieve <query>` | Show retrieved chunks for a query (no LLM) |
 | `/show <pmid>` | Print a paper's stored abstract/results/review text |
 | `/llm [<question>] [--reset]` | RAG answer; bare `/llm` = conversation mode |

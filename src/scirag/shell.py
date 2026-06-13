@@ -20,17 +20,11 @@ console = Console()
 
 # (command, args-hint, description)
 _COMMANDS: list[tuple[str, str, str]] = [
-    ("/search", "<query> [--retmax N]", "search PubMed, show full-text availability"),
-    ("/index", "<query> [--retmax N] [--full-text]", "interactive fetch + select + index"),
-    (
-        "/bsearch",
-        "<query> [--retmax N] [--days-back N]",
-        "keyword search over recent bioRxiv preprints",
-    ),
+    ("/index", "<query> [--retmax N] [--full-text]", "fetch + select + index PubMed articles"),
     (
         "/bindex",
         "<query> [--retmax N] [--days-back N] [--full-text]",
-        "interactive fetch + select + index bioRxiv",
+        "fetch + select + index bioRxiv preprints",
     ),
     ("/retrieve", "<query>", "query local index (no LLM)"),
     ("/show", "<pmid>", "print a paper's stored abstract/results text"),
@@ -429,15 +423,7 @@ def _dispatch(line: str, session: PromptSession) -> None:
             console.print(f"Switched to project [cyan]{name}[/].")
         return
 
-    if cmd == "/search":
-        if not query:
-            console.print("[yellow]Usage:[/] /search <query> [--retmax N]")
-            return
-        from scirag.cli import do_search
-
-        do_search(query, retmax=int(flags.get("retmax", 15)))
-
-    elif cmd == "/index":
+    if cmd == "/index":
         if not query:
             console.print("[yellow]Usage:[/] /index <query> [--retmax N] [--full-text]")
             return
@@ -447,18 +433,6 @@ def _dispatch(line: str, session: PromptSession) -> None:
             query,
             retmax=int(flags.get("retmax", 25)),
             full_text="full-text" in flags or "full_text" in flags,
-        )
-
-    elif cmd == "/bsearch":
-        if not query:
-            console.print("[yellow]Usage:[/] /bsearch <query> [--retmax N] [--days-back N]")
-            return
-        from scirag.cli import do_bsearch
-
-        do_bsearch(
-            query,
-            retmax=int(flags.get("retmax", 15)),
-            days_back=int(flags.get("days-back", flags.get("days_back", 180))),
         )
 
     elif cmd == "/bindex":

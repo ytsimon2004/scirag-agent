@@ -154,33 +154,6 @@ def print_retrieve_results(nodes) -> None:
 # ---------------------------------------------------------------------------
 
 
-def do_search(query: str, retmax: int = 15) -> None:
-    from scirag.sources.pubmed import _pmids_to_pmcids
-
-    arts = pubmed.search_and_fetch(query, retmax=retmax)
-    if not arts:
-        console.print("[yellow]No results.[/]")
-        return
-
-    pmc_map = _pmids_to_pmcids([a.pmid for a in arts])
-    console.print()
-    for a in arts:
-        pmc_tag = "[green]PMC✓[/]" if a.pmid in pmc_map else "[dim]PMC✗[/]"
-        doi_tag = "[green]DOI✓[/]" if a.doi else "[dim]DOI✗[/]"
-        abst_tag = "[green]ABS✓[/]" if a.abstract else "[red]ABS✗[/]"
-        console.print(
-            f"[bold cyan][link={a.url}]{a.pmid}[/link][/] {a.title[:70]} [dim]({a.year})[/]\n"
-            f"  {pmc_tag} {doi_tag} {abst_tag}  [dim]{a.journal}[/]\n"
-            f"  [dim][link={a.url}]{a.url}[/link][/]"
-        )
-    n_pmc = sum(1 for a in arts if a.pmid in pmc_map)
-    n_doi = sum(1 for a in arts if a.doi)
-    console.print(
-        f"\n[green]{len(arts)} articles[/]  —  "
-        f"PMC: {n_pmc}  |  DOI/Unpaywall: {n_doi}  |  abstract-only: {len(arts) - n_pmc}"
-    )
-
-
 def do_index(query: str, retmax: int = 25, full_text: bool = False) -> None:
     import questionary
     from scirag.ingest.index import build_index, get_indexed_pmids
@@ -278,28 +251,6 @@ def do_index(query: str, retmax: int = 25, full_text: bool = False) -> None:
     console.print(f"Embedding + indexing [cyan]{len(new_arts)}[/] article(s)...")
     build_index(new_arts)
     console.print("[green]Indexed.[/]")
-
-
-def do_bsearch(query: str, retmax: int = 15, days_back: int = 180) -> None:
-    """Keyword search over recent bioRxiv preprints (title/abstract match)."""
-    from scirag.sources import biorxiv
-
-    console.print(f"[dim]Searching bioRxiv via Europe PMC (last {days_back} days)…[/]")
-    arts = biorxiv.search_and_fetch(query, days_back=days_back, retmax=retmax)
-    if not arts:
-        console.print("[yellow]No results.[/] Try other terms or a wider [cyan]--days-back[/].")
-        return
-
-    console.print()
-    for a in arts:
-        abst_tag = "[green]ABS✓[/]" if a.abstract else "[red]ABS✗[/]"
-        category = a.pub_types[0] if a.pub_types else ""
-        console.print(
-            f"[bold cyan][link={a.url}]{a.doi}[/link][/] {a.title[:70]} [dim]({a.year})[/]\n"
-            f"  {abst_tag}  [magenta]bioRxiv[/]  [dim]{category}[/]\n"
-            f"  [dim][link={a.url}]{a.url}[/link][/]"
-        )
-    console.print(f"\n[green]{len(arts)} preprint(s)[/]  —  source: bioRxiv")
 
 
 def do_bindex(query: str, retmax: int = 25, days_back: int = 180, full_text: bool = False) -> None:
@@ -1013,12 +964,6 @@ _FULL_TEXT_HELP = "also fetch + index each paper's full-text Results section (sl
 
 
 @app.command()
-def search(query: str, retmax: int = typer.Option(15, help=_RETMAX_HELP)):
-    """Raw PubMed search with full-text availability indicators."""
-    do_search(query, retmax)
-
-
-@app.command()
 def index(
     query: str,
     retmax: int = typer.Option(25, help=_RETMAX_HELP),
@@ -1026,16 +971,6 @@ def index(
 ):
     """Fetch, preview, select, and index PubMed articles interactively."""
     do_index(query, retmax, full_text)
-
-
-@app.command()
-def bsearch(
-    query: str,
-    retmax: int = typer.Option(15, help=_RETMAX_HELP),
-    days_back: int = typer.Option(180, help=_DAYS_BACK_HELP),
-):
-    """Keyword search over recent bioRxiv preprints."""
-    do_bsearch(query, retmax, days_back)
 
 
 @app.command()
