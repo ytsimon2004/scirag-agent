@@ -394,7 +394,7 @@ def do_show(pmid: str) -> None:
         console.print(text)
 
 
-_LLM_AGENTS = ("synthesizer", "critic", "neuro_entity", "planner", "retriever")
+_LLM_AGENTS = ("synthesizer", "critic", "planner", "retriever")
 
 
 def do_model(backend_key: str = "") -> None:
@@ -492,10 +492,6 @@ def do_llm(query: str, *, reset: bool = False) -> None:
         return
 
     result = prepare_answer(query, _llm_history)
-
-    nonempty = {k: v for k, v in result.entities.items() if v}
-    if nonempty:
-        console.print(f"[dim]entities: {nonempty}[/]")
 
     if result.use_rag:
         console.print(_source_summary(result.nodes))

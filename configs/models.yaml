@@ -5,7 +5,6 @@
 agents:
   planner: local-qwen14b
   retriever: local-qwen14b
-  neuro_entity: local-qwen14b
   synthesizer: local-qwen14b
   critic: local-qwen14b
 

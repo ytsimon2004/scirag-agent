@@ -18,7 +18,6 @@ from scirag.agents.synthesize import SYSTEM as SYSTEM_GROUNDED
 from scirag.agents.synthesize import _format_sources
 from scirag.config import pipeline_cfg
 from scirag.ingest.index import get_indexed_pmids
-from scirag.neuro.entities import expand_query, extract_entities
 from scirag.retrieval.retriever import retrieve
 
 # Used when retrieval finds nothing relevant enough to ground the answer.
@@ -38,7 +37,6 @@ class RagResult:
     """Everything a caller needs to render the turn and call the LLM."""
 
     query: str
-    entities: dict[str, list[str]]
     nodes: list[NodeWithScore]  # passages actually used (empty when use_rag is False)
     use_rag: bool
     top_score: float
@@ -59,11 +57,9 @@ def prepare_answer(
     cfg = pipeline_cfg()["retrieval"]
     threshold = cfg.get("rag_score_threshold", _DEFAULT_RAG_SCORE_THRESHOLD)
 
-    entities = extract_entities(query)
-    expanded = expand_query(query, entities)
     # Skip retrieval entirely on an empty index — avoids a pointless query and
     # any vector-store error when no table exists yet.
-    nodes = retrieve(expanded) if get_indexed_pmids() else []
+    nodes = retrieve(query) if get_indexed_pmids() else []
 
     top_score = max((n.score or 0.0 for n in nodes), default=0.0)
     use_rag = bool(nodes) and top_score >= threshold
@@ -85,7 +81,6 @@ def prepare_answer(
 
     return RagResult(
         query=query,
-        entities=entities,
         nodes=nodes,
         use_rag=use_rag,
         top_score=top_score,

@@ -15,7 +15,7 @@ from scirag.ingest.index import get_indexed_pmids
 from scirag.llm.router import complete_stream
 from scirag.projects import get_active_project
 
-_LLM_AGENTS = ("synthesizer", "critic", "neuro_entity", "planner", "retriever")
+_LLM_AGENTS = ("synthesizer", "critic", "planner", "retriever")
 
 
 def _status_text() -> str:
@@ -87,9 +87,7 @@ async def on_message(message: cl.Message) -> None:
     # --- Entity extraction + retrieval + relevance gating (shared pipeline) ---
     async with cl.Step(name="Searching index", type="retrieval") as step:
         result = prepare_answer(query, history)
-        nonempty = {k: v for k, v in result.entities.items() if v}
-        if nonempty:
-            step.output = f"Entities: {nonempty}"
+        step.output = f"Retrieved {len(result.nodes)} chunk(s)"
 
     # --- Retrieved sources as one collapsible step (click the row to expand) ---
     if result.nodes:
