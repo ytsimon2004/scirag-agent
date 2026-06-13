@@ -52,6 +52,35 @@ _COMMANDS: list[tuple[str, str, str]] = [
 ]
 
 
+def _build_flag_help() -> dict[str, str]:
+    """Per-flag help (for the completion meta + bottom toolbar), read straight from
+    the Typer command definitions in scirag.cli — the same source as
+    `scirag <cmd> --help`, so the two never drift. `/project --default` is a
+    shell-only flag with no Typer command, so it's supplemented here.
+    """
+    help_map = {"--default": "switch to the default global index"}
+    try:
+        import typer
+
+        from scirag.cli import app
+
+        for command in typer.main.get_command(app).commands.values():
+            for param in command.params:
+                text = getattr(param, "help", None)
+                if not text:
+                    continue
+                for opt in getattr(param, "opts", []):
+                    if opt.startswith("--"):
+                        help_map.setdefault(opt, text)
+    except Exception:
+        pass
+    return help_map
+
+
+# Per-flag help, shown for the flag being typed (completion meta + bottom toolbar).
+_FLAG_HELP: dict[str, str] = _build_flag_help()
+
+
 def _pdf_or_dir(path: str) -> bool:
     """Show directories (to navigate) and PDF files for /import-pdf completion."""
     return os.path.isdir(path) or path.lower().endswith(".pdf")
@@ -107,7 +136,12 @@ class _ShellCompleter(Completer):
             return
         for flag in re.findall(r"--[\w-]+", args_hint):
             if flag.startswith(word):
-                yield Completion(flag, start_position=-len(word), display=flag, display_meta=desc)
+                yield Completion(
+                    flag,
+                    start_position=-len(word),
+                    display=flag,
+                    display_meta=_FLAG_HELP.get(flag, desc),
+                )
 
 
 _COMPLETER = _ShellCompleter()
@@ -509,10 +543,25 @@ def _bottom_toolbar() -> FormattedText:
     """
     from prompt_toolkit.application import get_app
 
-    text = get_app().current_buffer.text.lstrip()
-    token = text.split(maxsplit=1)[0] if text else ""
+    doc = get_app().current_buffer.document
+    line = doc.text.lstrip()
+    token = line.split(maxsplit=1)[0] if line else ""
 
     spec = next(((c, a, d) for c, a, d in _COMMANDS if c == token), None)
+
+    # If the cursor is on a "--…" token of a known command, show that flag's help.
+    word = doc.get_word_before_cursor(WORD=True)
+    if spec is not None and word.startswith("-"):
+        cmd, args, desc = spec
+        matches = [f for f in re.findall(r"--[\w-]+", args) if f.startswith(word)]
+        if len(matches) == 1:
+            flag = matches[0]
+            return FormattedText(
+                [("bold", flag), ("fg:#888888", f"   — {_FLAG_HELP.get(flag, desc)}")]
+            )
+        if len(matches) > 1:
+            return FormattedText([("fg:#888888", "flags:  " + "   ".join(matches))])
+
     if spec is not None:
         cmd, args, desc = spec
         return FormattedText(

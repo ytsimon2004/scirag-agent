@@ -905,26 +905,45 @@ def do_clear_db(force: bool = False) -> None:
 # ---------------------------------------------------------------------------
 
 
+# Reused flag help (single source — read by the shell's completer/toolbar too).
+_RETMAX_HELP = "max number of results to fetch"
+_DAYS_BACK_HELP = "how many days back to search bioRxiv (via Europe PMC)"
+_FULL_TEXT_HELP = "also fetch + index each paper's full-text Results section (slower)"
+
+
 @app.command()
-def search(query: str, retmax: int = 15):
+def search(query: str, retmax: int = typer.Option(15, help=_RETMAX_HELP)):
     """Raw PubMed search with full-text availability indicators."""
     do_search(query, retmax)
 
 
 @app.command()
-def index(query: str, retmax: int = 25, full_text: bool = False):
+def index(
+    query: str,
+    retmax: int = typer.Option(25, help=_RETMAX_HELP),
+    full_text: bool = typer.Option(False, help=_FULL_TEXT_HELP),
+):
     """Fetch, preview, select, and index PubMed articles interactively."""
     do_index(query, retmax, full_text)
 
 
 @app.command()
-def bsearch(query: str, retmax: int = 15, days_back: int = 180):
+def bsearch(
+    query: str,
+    retmax: int = typer.Option(15, help=_RETMAX_HELP),
+    days_back: int = typer.Option(180, help=_DAYS_BACK_HELP),
+):
     """Keyword search over recent bioRxiv preprints."""
     do_bsearch(query, retmax, days_back)
 
 
 @app.command()
-def bindex(query: str, retmax: int = 25, days_back: int = 180, full_text: bool = False):
+def bindex(
+    query: str,
+    retmax: int = typer.Option(25, help=_RETMAX_HELP),
+    days_back: int = typer.Option(180, help=_DAYS_BACK_HELP),
+    full_text: bool = typer.Option(False, help=_FULL_TEXT_HELP),
+):
     """Fetch, preview, select, and index bioRxiv preprints interactively."""
     do_bindex(query, retmax, days_back, full_text)
 
