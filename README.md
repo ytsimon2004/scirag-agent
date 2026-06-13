@@ -7,6 +7,10 @@ models (Claude / OpenAI) through a single config switch.
 
 ---
 
+![scirag demo](docs/demo.gif)
+
+---
+
 ## Why scirag?
 
 Two common workflows for LLM-assisted literature review — and where they fall short:
