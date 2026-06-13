@@ -538,7 +538,7 @@ def do_import_pdf(path: str) -> None:
     from scirag.ingest.index import build_index
     from scirag.sources.pdf import load_pdf_as_article
 
-    p = Path(path)
+    p = Path(path).expanduser()
     if not p.exists():
         console.print(f"[red]File not found:[/] {path}")
         return
@@ -566,7 +566,7 @@ def do_import_dir(path: str) -> None:
     from scirag.ingest.index import build_index
     from scirag.sources.pdf import load_pdf_directory
 
-    d = Path(path)
+    d = Path(path).expanduser()
     if not d.is_dir():
         console.print(f"[red]Not a directory:[/] {path}")
         return
@@ -581,6 +581,17 @@ def do_import_dir(path: str) -> None:
     console.print(f"Resolved [cyan]{len(articles)}[/] article(s). Embedding + indexing...")
     build_index(articles)
     console.print("[green]Indexed.[/]")
+
+
+def do_import(path: str) -> None:
+    """Index a PDF file or every PDF in a directory — routed by what `path` is."""
+    p = Path(path).expanduser()
+    if p.is_dir():
+        do_import_dir(str(p))
+    elif p.is_file() or p.suffix.lower() == ".pdf":
+        do_import_pdf(str(p))
+    else:
+        console.print(f"[red]No such file or directory:[/] {path}")
 
 
 _ENV_KEYS = {
@@ -973,6 +984,12 @@ def llm(
 def llm_ui(port: int = typer.Option(8000, "--port", "-p", help="Port to listen on.")):
     """Launch the Chainlit web UI for RAG chat."""
     do_llm_ui(port)
+
+
+@app.command(name="import")
+def import_(path: str):
+    """Index a PDF file or every PDF in a directory (auto-detected)."""
+    do_import(path)
 
 
 @app.command(name="import-pdf")

@@ -37,8 +37,7 @@ _COMMANDS: list[tuple[str, str, str]] = [
     ("/llm", "[<question>] [--reset]", "RAG answer; bare /llm = sticky conversation mode"),
     ("/llm-ui", "[--port N]", "open Chainlit web UI in browser (click-to-expand sources)"),
     ("/model", "[backend-key]", "list or switch LLM backend"),
-    ("/import-pdf", "<path>", "index a single PDF (Results section only)"),
-    ("/import-dir", "<path>", "index all PDFs in a directory"),
+    ("/import", "<path>", "index a PDF file, or every PDF in a directory"),
     ("/env", "[set <KEY> <val> | unset <KEY>]", "manage API keys in ~/.scirag-agent/.env"),
     ("/status", "", "show index statistics"),
     ("/remove", "[pmid ...]", "remove article(s) from the index (interactive if no args)"),
@@ -81,9 +80,20 @@ def _build_flag_help() -> dict[str, str]:
 _FLAG_HELP: dict[str, str] = _build_flag_help()
 
 
-def _pdf_or_dir(path: str) -> bool:
-    """Show directories (to navigate) and PDF files for /import-pdf completion."""
-    return os.path.isdir(path) or path.lower().endswith(".pdf")
+def _is_hidden(path: str) -> bool:
+    """True for dotfiles/dotdirs (e.g. .git), which path completion should skip."""
+    return os.path.basename(path.rstrip(os.sep)).startswith(".")
+
+
+def _import_path(path: str) -> bool:
+    """Completion filter for /import: non-hidden directories (to navigate into) and
+    PDF files. Lets the user pick either a single PDF or a folder of PDFs."""
+    return not _is_hidden(path) and (os.path.isdir(path) or path.lower().endswith(".pdf"))
+
+
+def _visible_dir(path: str) -> bool:
+    """Completion filter for directory-only completion: skip hidden dirs."""
+    return not _is_hidden(path)
 
 
 class _ShellCompleter(Completer):
@@ -91,10 +101,14 @@ class _ShellCompleter(Completer):
     flags of the command being typed, and filesystem paths for /import-*."""
 
     def __init__(self) -> None:
-        self._pdf_paths = PathCompleter(expanduser=True, file_filter=_pdf_or_dir)
-        self._dir_paths = PathCompleter(expanduser=True, only_directories=True)
+        self._import_paths = PathCompleter(expanduser=True, file_filter=_import_path)
+        self._dir_paths = PathCompleter(
+            expanduser=True, only_directories=True, file_filter=_visible_dir
+        )
+        # /import takes either; /import-pdf and /import-dir remain as aliases.
         self._path_completers = {
-            "/import-pdf": self._pdf_paths,
+            "/import": self._import_paths,
+            "/import-pdf": self._import_paths,
             "/import-dir": self._dir_paths,
         }
 
@@ -500,6 +514,14 @@ def _dispatch(line: str, session: PromptSession) -> None:
 
         do_model(query)
 
+    elif cmd == "/import":
+        if not query:
+            console.print("[yellow]Usage:[/] /import <path>  (a PDF file or a directory of PDFs)")
+            return
+        from scirag.cli import do_import
+
+        do_import(query)
+
     elif cmd == "/import-pdf":
         if not query:
             console.print("[yellow]Usage:[/] /import-pdf <path>")
@@ -524,7 +546,7 @@ def _import_dir_arg(text: str) -> str | None:
     """If `text` is an /import-* command whose path argument is an existing
     directory, return that expanded directory path; otherwise None."""
     stripped = text.lstrip()
-    for cmd in ("/import-pdf", "/import-dir"):
+    for cmd in ("/import", "/import-pdf", "/import-dir"):
         prefix = cmd + " "
         if stripped.startswith(prefix):
             arg = stripped[len(prefix) :]
