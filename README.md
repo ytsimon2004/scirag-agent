@@ -1,21 +1,41 @@
 # scirag-agent
 
-Scientific RAG over PubMed/PMC — an interactive shell for retrieving, indexing,
-and asking grounded, cited questions about the literature (neuroscience-focused).
+An interactive shell for building a **local, curated literature index** and asking
+grounded, cited questions against it. Sources: PubMed, bioRxiv, local PDFs, or any
+free-form text. LLM-agnostic — runs fully offline via Ollama or routes to frontier
+models (Claude / OpenAI) through a single config switch.
 
-Built with **LlamaIndex** (chunking, embeddings, LanceDB vector store, hybrid
-dense + BM25 retrieval) and **LiteLLM** (one router across local and frontier
-LLMs). Runs fully local via Ollama, or with frontier models (Claude / OpenAI) —
-selectable per agent in `configs/models.yaml`.
+---
 
-The index accepts three kinds of content:
+## Why scirag?
+
+Two common workflows for LLM-assisted literature review — and where they fall short:
+
+| | LLM + PubMed MCP / direct API | Cloud project mode (upload PDFs) | **scirag** |
+|---|---|---|---|
+| **Answer grounding** | None — LLM synthesises freely from returned text | Opaque — no guarantee claims map to specific passages | Every claim cited with `[PMID]` / `[DOI]` |
+| **Text depth** | Abstract only (what the paper claimed to study) | Whatever the upload pipeline extracts | Prioritises **Results section** (what the paper actually found) |
+| **RAG transparency** | None | Black box — chunks and scores hidden | Full — `/retrieve` shows ranked chunks, `/show` shows stored text |
+| **Index curation** | Model retrieves from all of PubMed on every query | Fixed to whatever files you uploaded | You select exactly which papers are in scope, organised by project |
+| **Privacy** | Queries sent to NCBI + LLM provider | Papers uploaded to cloud storage | Index stays on your machine; Ollama option is fully offline |
+| **Hallucination risk** | High — no grounding enforcement | Medium — grounding is implicit | Low — model is given only the retrieved passages; falls back to general knowledge explicitly when no source clears the relevance threshold |
+
+The core trade-off scirag makes: you spend a little time curating an index, and in return every answer is verifiable and every retrieved passage is inspectable.
+
+---
+
+## What goes into the index
 
 - **PubMed articles** — fetched by keyword search and indexed with full-text when
   available (Results section via PMC, or open-access PDF via Unpaywall).
 - **bioRxiv preprints** — searched via Europe PMC and indexed with full JATS XML
   when available.
-- **Free-form text** — paste any text directly into the index with `/text`
-  (prompted for title, identifier, origin, year, author).
+- **Local PDFs** — resolved to a PubMed record by PMID, DOI, or title search.
+- **Free-form text** — paste any text directly with `/text` (prompted for title,
+  identifier, origin, year, author).
+
+Built with **LlamaIndex** (chunking, embeddings, LanceDB vector store, hybrid
+dense + BM25 retrieval) and **LiteLLM** (one router across local and frontier LLMs).
 
 ---
 
