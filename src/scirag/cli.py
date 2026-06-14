@@ -1028,9 +1028,7 @@ def do_llm_ui(port: int = 8000) -> None:
 
 
 def print_system_info() -> None:
-    """Print the system info panel (LLM, embedding, Ollama, project, index, directory)."""
-    from pathlib import Path
-
+    """Print the system info panel (LLM, embedding, Ollama, project, index)."""
     from rich.panel import Panel
     from rich.table import Table
 
@@ -1043,7 +1041,6 @@ def print_system_info() -> None:
     llm_model = models_cfg()["backends"][llm_key]["model"]
     rcfg = get_retrieval()
     project = get_active_project() or "none (global)"
-    cwd = Path.cwd()
 
     try:
         n_articles = len(get_indexed_pmids())
@@ -1078,7 +1075,6 @@ def print_system_info() -> None:
         f"[yellow]{project}[/]" if get_active_project() else f"[dim]{project}[/]",
     )
     grid.add_row("index", f"[dim]{index_str}[/]")
-    grid.add_row("directory", f"[dim]{cwd}[/]")
 
     console.print(
         Panel(
