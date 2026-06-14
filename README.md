@@ -298,9 +298,10 @@ scirag[rsc] ❯ /llm-ui --port 8080  # custom port
 ```
 
 Requires `uv sync --extra ui`. Streaming chat, a **click-to-expand Sources** row
-per answer, and a settings panel to switch backend mid-conversation. The web UI
-and shell share the same index and project — index in the shell, ask in the
-browser, or mix freely.
+per answer, and a ⚙️ settings panel to adjust **backend, reasoning effort, and
+retrieval params** (`final_k`, `top_k`, `bm25_k`, `hybrid`, `rerank`, threshold)
+mid-conversation. The web UI and shell share the same index and project — index in
+the shell, ask in the browser, or mix freely.
 
 ---
 
