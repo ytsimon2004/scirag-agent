@@ -532,6 +532,14 @@ _RAG_PARAMS: list[tuple[str, type, str, str]] = [
         "'no relevant sources — answering from general knowledge' fallbacks; ↓ = grounds even "
         "on weak matches.",
     ),
+    (
+        "rerank",
+        bool,
+        "cross-encoder reranking",
+        "Re-score the fused candidates with a cross-encoder (bge-reranker-v2-m3) and keep the "
+        "best final_k — better precision on which chunks survive. Adds latency and needs the "
+        "'rerank' extra (`uv sync --extra rerank`); falls back to RRF order if unavailable.",
+    ),
 ]
 
 
@@ -1061,7 +1069,8 @@ def print_system_info() -> None:
     grid.add_row(
         "retrieval",
         f"[dim]final_k {rcfg['final_k']} · top_k {rcfg['top_k']} · bm25_k {rcfg['bm25_k']} · "
-        f"hybrid {'on' if rcfg.get('hybrid') else 'off'} · threshold {rcfg['rag_score_threshold']}[/]",
+        f"hybrid {'on' if rcfg.get('hybrid') else 'off'} · rerank {'on' if rcfg.get('rerank') else 'off'} · "
+        f"threshold {rcfg['rag_score_threshold']}[/]",
     )
     grid.add_row("ollama", ollama)
     grid.add_row(

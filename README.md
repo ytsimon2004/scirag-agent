@@ -39,7 +39,8 @@ The core trade-off scirag makes: you spend a little time curating an index, and 
   identifier, origin, year, author).
 
 Built with **LlamaIndex** (chunking, embeddings, LanceDB vector store, hybrid
-dense + BM25 retrieval) and **LiteLLM** (one router across local and frontier LLMs).
+dense + BM25 retrieval with optional cross-encoder reranking) and **LiteLLM**
+(one router across local and frontier LLMs).
 
 ---
 
@@ -80,7 +81,10 @@ ollama pull bge-m3                         # embeddings (~1.2 GB)
 
 So the qwen download is optional — only needed if you want a local LLM.
 
-Web UI (optional): `uv sync --extra ui`
+Optional extras:
+- Web UI: `uv sync --extra ui`
+- Cross-encoder reranking (`bge-reranker-v2-m3`, pulls sentence-transformers + torch):
+  `uv sync --extra rerank` — then enable with `/rag rerank on`.
 
 ---
 
@@ -225,6 +229,39 @@ knowledge and says so instead of citing weak matches.
 
 ## Supporting commands
 
+### Tune reasoning & retrieval
+
+**Reasoning effort** — trade speed for depth. `low` turns the local model's
+thinking off (fastest); `medium`/`high` keep it on. Maps per backend (Ollama
+`think`, frontier `reasoning_effort`, `claude --effort`, `codex` reasoning):
+
+```
+scirag[rsc] ❯ /effort           # show current (default: medium)
+scirag[rsc] ❯ /effort low       # fastest answers
+```
+
+Each `/llm` answer prints its effort and elapsed time, so you can compare.
+
+**Retrieval parameters** — control which chunks reach the LLM. `/rag` opens a
+picker (with per-parameter help explaining the effect), or set one directly:
+
+```
+scirag[rsc] ❯ /rag                  # interactive picker
+scirag[rsc] ❯ /rag final_k 12       # send more chunks (better recall, larger prompt)
+scirag[rsc] ❯ /rag rerank on        # cross-encoder rerank (needs --extra rerank)
+```
+
+| Param | Effect |
+|---|---|
+| `final_k` | Chunks sent to the LLM. Biggest lever on recall **and** latency |
+| `top_k` / `bm25_k` | Candidate pool size (dense / keyword). Cheap — doesn't grow the prompt |
+| `hybrid` | Dense + BM25 fusion (on) vs. dense-only (off) |
+| `rerank` | Re-score candidates with a cross-encoder, keep the best `final_k` |
+| `rag_score_threshold` | Min similarity to answer from your papers vs. general knowledge |
+
+Both `/effort` and `/rag` are session-only (reset each launch); `/status` shows
+the active values.
+
 ### Import PDFs
 
 When automatic full-text retrieval can't reach a paper, import PDFs you've
@@ -267,6 +304,8 @@ browser, or mix freely.
 | `/llm [<question>] [--reset]` | RAG answer; bare `/llm` = conversation mode |
 | `/llm-ui [--port N]` | Open the Chainlit web UI |
 | `/model [backend-key]` | List or switch LLM backend |
+| `/effort [low\|medium\|high]` | Set LLM reasoning effort (speed vs. accuracy) |
+| `/rag [<param> <value>]` | Tune retrieval params (final_k, top_k, rerank, …); no args = picker |
 | `/import <path>` | Import a PDF file or directory of PDFs, resolved to PubMed |
 | `/env [set\|unset <KEY> <val>]` | Manage API keys in `~/.scirag-agent/.env` |
 | `/status` | Index listing + statistics |

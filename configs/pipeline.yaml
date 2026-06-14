@@ -15,9 +15,9 @@ index:
 # Hybrid retrieval (src/scirag/retrieval/retriever.py): two independent searches
 # over the indexed chunks, merged by reciprocal-rank fusion (RRF).
 retrieval:
-  top_k: 12          # dense pass: N most embedding-similar chunks (bge-m3 cosine) — semantic match
-  bm25_k: 12         # sparse pass: N top BM25 keyword hits — literal match (acronyms, gene names)
-  final_k: 6         # chunks kept after fusion and sent to the synthesizer.
+  top_k: 30          # dense pass: N most embedding-similar chunks (bge-m3 cosine) — semantic match
+  bm25_k: 30         # sparse pass: N top BM25 keyword hits — literal match (acronyms, gene names)
+  final_k: 10         # chunks kept after fusion and sent to the synthesizer.
                      #   ^ biggest lever on both answer grounding AND latency:
                      #     more chunks = better recall but a larger prompt to prefill.
   hybrid: true       # true = dense + BM25 fused via RRF; false = dense-only (top_k then final_k)
@@ -25,6 +25,12 @@ retrieval:
                              # raw cosine similarity is below this, drop the sources and answer from
                              # general knowledge instead. Higher = more "no relevant sources"; lower
                              # = grounds on weaker matches. NB: compared to cosine score, NOT the RRF score.
+  rerank: false      # OFF by default (opt-in). When true, re-score the fused candidates with a
+                     # cross-encoder and keep the best final_k — raises precision (better chunks
+                     # survive); retrieve wide (top_k/bm25_k) then rerank. Enable with `/rag rerank on`.
+                     # Needs the 'rerank' extra: `uv sync --extra rerank`. First call loads the model
+                     # (~600 MB download once); falls back to RRF order if unavailable.
+  rerank_model: "BAAI/bge-reranker-v2-m3"   # any sentence-transformers CrossEncoder
 
 # Default fetch sizes for the source clients. NOTE: not currently read by the
 # code — the CLI sets these via command flags (--retmax / --days-back); kept here

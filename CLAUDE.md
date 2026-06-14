@@ -11,8 +11,9 @@ the `claude`/`codex` CLIs) — sit behind one LiteLLM router, selectable per age
 
 ## Environment & setup
 - **uv** manages everything. Python 3.11.
-- `uv sync` — install. `uv sync --extra mcp --extra eval --extra ui` for extras
-  (or `--extra all`).
+- `uv sync` — install. `uv sync --extra mcp --extra eval --extra ui --extra rerank`
+  for extras (or `--extra all`). `rerank` pulls sentence-transformers + torch for
+  cross-encoder reranking; without it, retrieval falls back to RRF order.
 - API keys live in `~/.scirag-agent/.env` (manage with `scirag env`). Set
   `NCBI_API_KEY` (raises PubMed rate limit to 10 req/s) and
   `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` only if a frontier backend is selected.
@@ -35,10 +36,17 @@ the `claude`/`codex` CLIs) — sit behind one LiteLLM router, selectable per age
   model_reasoning_effort`). Effort also scales the answer token budget. Session-only,
   defaults to `medium`.
 - `scirag rag` (or `/rag` in the shell) tunes retrieval params live — `final_k`, `top_k`,
-  `bm25_k`, `hybrid`, `rag_score_threshold` — via a picker with per-param help, or
+  `bm25_k`, `hybrid`, `rag_score_threshold`, `rerank` — via a picker with per-param help, or
   `/rag final_k 4` shorthand. Session-only overrides merged in `config.get_retrieval()`
   (which `retriever.py` and `agents/pipeline.py` read); `chunk_size`/`chunk_overlap` are
   index-time only and intentionally excluded.
+- Retrieval (`retrieval/retriever.py`) = dense (bge-m3) + BM25 → RRF fusion → optional
+  **cross-encoder rerank** (`bge-reranker-v2-m3` via sentence-transformers) → top `final_k`.
+  Retrieve wide (`top_k`/`bm25_k` ~30) and let the reranker pick the best `final_k` — raises
+  recall *and* precision. Reranking only reorders nodes; their cosine `.score` is preserved so
+  the `rag_score_threshold` gate still works. **Off by default** (opt-in: `/rag rerank on`);
+  needs `--extra rerank`; degrades to RRF order if absent. Model is lazy-loaded and cached on
+  first reranked query.
 
 ## Hardware
 - **Mac (36 GB unified)** is the primary local inference box — run Qwen3-14B (q4) +
@@ -108,6 +116,6 @@ uv run python -m scirag.mcp_server.server       # MCP server (needs --extra mcp)
 Current pipeline is linear (`extract_entities -> retrieve -> synthesize`). Next:
 wire the `planner`/`retriever`/`critic` agents; LangGraph for conditional routing —
 critic/verifier loop that scores citation grounding and routes back to `retrieve` on
-failure; supervisor/router node; query-planner (MeSH expansion); reranker
-(`bge-reranker-v2-m3`); real ontology resolvers (Allen Brain Atlas, NCBI Gene,
-UniProt, ChEBI, MeSH).
+failure; supervisor/router node; query-planner (MeSH expansion); real ontology
+resolvers (Allen Brain Atlas, NCBI Gene, UniProt, ChEBI, MeSH).
+(Done: hybrid dense+BM25 retrieval with RRF; cross-encoder reranking via `bge-reranker-v2-m3`.)

@@ -95,3 +95,48 @@ class TestRetrieve:
 
             result = retrieve("grid cells")
         assert len(result) == 3
+
+    @patch("scirag.retrieval.retriever._get_reranker")
+    @patch("scirag.retrieval.retriever.get_retrieval")
+    @patch("scirag.retrieval.retriever.load_index")
+    def test_rerank_reorders_and_truncates(
+        self, mock_load_index, mock_get_retrieval, mock_get_reranker
+    ):
+        cfg = self._cfg(hybrid=False)
+        cfg.update(final_k=2, rerank=True, rerank_model="x")
+        mock_get_retrieval.return_value = cfg
+
+        nodes = [_make_node(str(i), score=0.9) for i in range(5)]
+        mock_retriever = MagicMock()
+        mock_retriever.retrieve.return_value = nodes
+        mock_load_index.return_value.as_retriever.return_value = mock_retriever
+
+        # Reranker scores ascending, so node "4" is most relevant, then "3".
+        fake = MagicMock()
+        fake.predict.return_value = [0.0, 1.0, 2.0, 3.0, 4.0]
+        mock_get_reranker.return_value = fake
+
+        from scirag.retrieval.retriever import retrieve
+
+        result = retrieve("place cells")
+        assert [r.node.node_id for r in result] == ["4", "3"]  # reranked order, final_k=2
+        assert result[0].score == 0.9  # cosine score preserved for the grounding gate
+
+    @patch("scirag.retrieval.retriever.get_retrieval")
+    @patch("scirag.retrieval.retriever.load_index")
+    def test_rerank_falls_back_when_unavailable(self, mock_load_index, mock_get_retrieval):
+        cfg = self._cfg(hybrid=False)
+        cfg.update(final_k=2, rerank=True, rerank_model="x")
+        mock_get_retrieval.return_value = cfg
+
+        nodes = [_make_node(str(i)) for i in range(5)]
+        mock_retriever = MagicMock()
+        mock_retriever.retrieve.return_value = nodes
+        mock_load_index.return_value.as_retriever.return_value = mock_retriever
+
+        # sentence_transformers absent → _get_reranker raises → keep RRF/dense order.
+        with patch.dict("sys.modules", {"sentence_transformers": None}):
+            from scirag.retrieval.retriever import retrieve
+
+            result = retrieve("grid cells")
+        assert [r.node.node_id for r in result] == ["0", "1"]  # original order, final_k=2
