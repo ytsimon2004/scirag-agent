@@ -19,6 +19,7 @@ from scirag.config import (
     set_effort,
     set_retrieval_param,
 )
+from scirag.cite import citation
 from scirag.ingest.index import get_indexed_pmids
 from scirag.llm.router import complete_stream
 from scirag.projects import get_active_project
@@ -170,13 +171,11 @@ async def on_message(message: cl.Message) -> None:
                 continue
             seen.add(pmid)
             title = md.get("title", "")
-            year = md.get("year", "")
             url = md.get("url", "")
             src = md.get("text_source", "abstract")
+            cite = citation(md)  # 'Powell et al., 2020' (includes the year)
             snippet = n.node.get_content()[:400].replace("\n", " ")
-            blocks.append(
-                f"**[{pmid}]** [{title[:75]}]({url}) *({year})* · `{src}`\n\n> {snippet}…"
-            )
+            blocks.append(f"**{cite}** · [{title[:75]}]({url}) · `{src}`\n\n> {snippet}…")
         label = f"Sources · {len(seen)} paper(s), {len(result.nodes)} chunk(s)"
         async with cl.Step(name=label, type="tool") as src_step:
             src_step.output = "\n\n---\n\n".join(blocks)

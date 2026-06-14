@@ -130,6 +130,8 @@ def _authors_short(authors: list[str]) -> str:
 
 
 def print_retrieve_results(nodes) -> None:
+    from scirag.cite import citation
+
     if not nodes:
         console.print("[yellow]No results — have you run /index yet?[/]")
         return
@@ -137,12 +139,10 @@ def print_retrieve_results(nodes) -> None:
         md = n.node.metadata
         snippet = n.node.get_content()[:120].replace("\n", " ")
         url = md.get("url", "")
-        pmid_display = f"[link={url}]{md.get('pmid', '?')}[/link]" if url else md.get("pmid", "?")
-        src = md.get("text_source", "")
-        src_tag = _source_tag(src)
-        console.print(
-            f"[bold cyan]{pmid_display}[/] {md.get('title', '')} [dim]({md.get('year', 'n.d.')})[/]  {src_tag}"
-        )
+        cite = citation(md)  # 'Powell et al., 2020' (already includes the year)
+        cite_display = f"[link={url}]{cite}[/link]" if url else cite
+        src_tag = _source_tag(md.get("text_source", ""))
+        console.print(f"[bold cyan]{cite_display}[/]  {md.get('title', '')}  {src_tag}")
         if url:
             console.print(f"  [dim][link={url}]{url}[/link][/]")
         console.print(f"  [dim]{snippet}…[/]\n")
@@ -651,17 +651,23 @@ _llm_history: list[dict[str, str]] = []
 
 
 def _source_summary(nodes) -> str:
-    """One-line summary of the sources grounding the answer. Full sources with
-    snippets and links are available in the web UI (/llm-ui)."""
-    pmids: list[str] = []
+    """One-line summary of the sources grounding the answer, as author-year
+    citations. Full sources with snippets and links are in the web UI (/llm-ui)."""
+    from scirag.cite import citation
+
+    cites: list[str] = []
+    seen: set[str] = set()
     for n in nodes:
-        p = n.node.metadata.get("pmid", "?")
-        if p not in pmids:
-            pmids.append(p)
-    papers = "paper" if len(pmids) == 1 else "papers"
+        md = n.node.metadata
+        pid = md.get("pmid", "?")
+        if pid in seen:
+            continue
+        seen.add(pid)
+        cites.append(citation(md))
+    papers = "paper" if len(cites) == 1 else "papers"
     return (
-        f"[dim]▸ grounded on {len(nodes)} chunk(s) from {len(pmids)} {papers} "
-        f"({', '.join(pmids)})[/]"
+        f"[dim]▸ grounded on {len(nodes)} chunk(s) from {len(cites)} {papers} "
+        f"({'; '.join(cites)})[/]"
     )
 
 

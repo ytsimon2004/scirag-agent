@@ -103,10 +103,13 @@ uv run python -m scirag.mcp_server.server       # MCP server (needs --extra mcp)
 - Agent role names in `models.yaml` (`planner`, `retriever`, `synthesizer`, `critic`)
   are the contract between config and code. Only `synthesizer` is wired to an LLM today;
   the others are configured ahead of the multi-agent buildout (see Roadmap).
-- Synthesis must cite every claim with the `[id]` marker from source metadata —
-  a PMID for PubMed records, a DOI (`10.1101/…`) for bioRxiv preprints. Both live
-  in the metadata `pmid` field, which is the system-wide primary key (dedup,
-  `show`, citations).
+- Synthesis cites every claim with a human-readable **author-year** marker
+  (e.g. `(Powell et al., 2020)`), built by `scirag.cite.citation()` from the
+  source metadata and used in the answer + all source listings (shell `/llm`,
+  `/retrieve`, web UI). The PMID (PubMed) / DOI (`10.1101/…`, bioRxiv) still lives
+  in the metadata `pmid` field and remains the system-wide **primary key** (dedup,
+  `show`/`remove`, and the `[id: …]` shown in each source block for traceability) —
+  it's just no longer the citation marker the model emits.
 - PubMed and bioRxiv are the data sources; the MCP server is how agents reach them.
   Don't bypass `sources/` with ad-hoc HTTP calls elsewhere. The bioRxiv API has no
   keyword-search endpoint, so `biorxiv.search` queries Europe PMC
