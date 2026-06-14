@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from llama_index.core.schema import NodeWithScore
 
-from scirag.config import pipeline_cfg
+from scirag.config import get_retrieval
 from scirag.ingest.index import load_index
 
 
@@ -25,7 +25,7 @@ def _rrf(rankings: list[list[NodeWithScore]], k: int = 60) -> list[NodeWithScore
 
 
 def retrieve(query: str) -> list[NodeWithScore]:
-    cfg = pipeline_cfg()["retrieval"]
+    cfg = get_retrieval()
     index = load_index()
 
     dense = index.as_retriever(similarity_top_k=cfg["top_k"]).retrieve(query)

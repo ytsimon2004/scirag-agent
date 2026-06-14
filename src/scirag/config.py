@@ -81,6 +81,21 @@ def get_effort() -> str:
     return _runtime_effort
 
 
+_runtime_retrieval: dict[str, Any] = {}  # retrieval param -> value, session override
+
+
+def get_retrieval() -> dict[str, Any]:
+    """Retrieval params: pipeline.yaml defaults merged with session overrides."""
+    cfg = dict(pipeline_cfg()["retrieval"])
+    cfg.update(_runtime_retrieval)
+    return cfg
+
+
+def set_retrieval_param(key: str, value: Any) -> None:
+    """Override one retrieval param for this session (does not modify pipeline.yaml)."""
+    _runtime_retrieval[key] = value
+
+
 def backend_for(agent: str) -> dict[str, Any]:
     """Resolve an agent role (e.g. 'synthesizer') to its concrete backend dict."""
     cfg = models_cfg()

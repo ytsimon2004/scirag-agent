@@ -62,12 +62,12 @@ class TestRetrieve:
     """Integration-style test: patch away index and config, verify routing."""
 
     def _cfg(self, hybrid: bool = False):
-        return {"retrieval": {"top_k": 5, "bm25_k": 5, "final_k": 3, "hybrid": hybrid}}
+        return {"top_k": 5, "bm25_k": 5, "final_k": 3, "hybrid": hybrid}
 
-    @patch("scirag.retrieval.retriever.pipeline_cfg")
+    @patch("scirag.retrieval.retriever.get_retrieval")
     @patch("scirag.retrieval.retriever.load_index")
-    def test_dense_only(self, mock_load_index, mock_pipeline_cfg):
-        mock_pipeline_cfg.return_value = self._cfg(hybrid=False)
+    def test_dense_only(self, mock_load_index, mock_get_retrieval):
+        mock_get_retrieval.return_value = self._cfg(hybrid=False)
         nodes = [_make_node(str(i)) for i in range(5)]
         mock_retriever = MagicMock()
         mock_retriever.retrieve.return_value = nodes
@@ -78,10 +78,10 @@ class TestRetrieve:
         result = retrieve("place cells")
         assert len(result) == 3  # final_k=3
 
-    @patch("scirag.retrieval.retriever.pipeline_cfg")
+    @patch("scirag.retrieval.retriever.get_retrieval")
     @patch("scirag.retrieval.retriever.load_index")
-    def test_hybrid_falls_back_when_bm25_unavailable(self, mock_load_index, mock_pipeline_cfg):
-        mock_pipeline_cfg.return_value = self._cfg(hybrid=True)
+    def test_hybrid_falls_back_when_bm25_unavailable(self, mock_load_index, mock_get_retrieval):
+        mock_get_retrieval.return_value = self._cfg(hybrid=True)
         nodes = [_make_node(str(i)) for i in range(5)]
         mock_retriever = MagicMock()
         mock_retriever.retrieve.return_value = nodes

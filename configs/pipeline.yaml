@@ -1,17 +1,34 @@
-# Retrieval + graph parameters.
+# Pipeline parameters: how documents are chunked, stored, and retrieved.
+# Read at runtime via scirag.config.pipeline_cfg(); a user copy at
+# ~/.scirag-agent/configs/pipeline.yaml overrides this one (see config.py).
+
 index:
+  # uri: legacy/unused — the actual LanceDB path comes from the active project
+  # (scirag.projects.get_active_db_uri), not from here.
   uri: "data/lancedb"
-  table: "scirag"
-  chunk_size: 1024
-  chunk_overlap: 128
+  table: "scirag"          # LanceDB table name (used by ingest + retrieval)
+  # Chunking applies at INDEX time only — changing these does not re-chunk
+  # already-indexed papers; re-index to take effect.
+  chunk_size: 1024         # tokens per chunk fed to the embedder/BM25
+  chunk_overlap: 128       # tokens shared between neighbouring chunks (preserves context across cuts)
 
+# Hybrid retrieval (src/scirag/retrieval/retriever.py): two independent searches
+# over the indexed chunks, merged by reciprocal-rank fusion (RRF).
 retrieval:
-  top_k: 12          # dense candidates
-  bm25_k: 12         # sparse candidates
-  final_k: 6         # passed to synthesizer after fusion
-  hybrid: true       # dense + BM25 reciprocal-rank fusion
-  rag_score_threshold: 0.3   # min top score to ground the answer; below this, answer from general knowledge
+  top_k: 12          # dense pass: N most embedding-similar chunks (bge-m3 cosine) — semantic match
+  bm25_k: 12         # sparse pass: N top BM25 keyword hits — literal match (acronyms, gene names)
+  final_k: 6         # chunks kept after fusion and sent to the synthesizer.
+                     #   ^ biggest lever on both answer grounding AND latency:
+                     #     more chunks = better recall but a larger prompt to prefill.
+  hybrid: true       # true = dense + BM25 fused via RRF; false = dense-only (top_k then final_k)
+  rag_score_threshold: 0.3   # grounding gate (applied in agents/pipeline.py): if the best chunk's
+                             # raw cosine similarity is below this, drop the sources and answer from
+                             # general knowledge instead. Higher = more "no relevant sources"; lower
+                             # = grounds on weaker matches. NB: compared to cosine score, NOT the RRF score.
 
+# Default fetch sizes for the source clients. NOTE: not currently read by the
+# code — the CLI sets these via command flags (--retmax / --days-back); kept here
+# as documentation of intended defaults.
 sources:
   pubmed:
     default_retmax: 10

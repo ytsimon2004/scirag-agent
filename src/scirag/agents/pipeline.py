@@ -16,7 +16,7 @@ from llama_index.core.schema import NodeWithScore
 
 from scirag.agents.synthesize import SYSTEM as SYSTEM_GROUNDED
 from scirag.agents.synthesize import _format_sources
-from scirag.config import pipeline_cfg
+from scirag.config import get_retrieval
 from scirag.ingest.index import get_indexed_pmids
 from scirag.retrieval.retriever import retrieve
 
@@ -54,7 +54,7 @@ def prepare_answer(
     cite-every-claim system prompt is used. Otherwise it falls back to a general
     system prompt with no sources.
     """
-    cfg = pipeline_cfg()["retrieval"]
+    cfg = get_retrieval()
     threshold = cfg.get("rag_score_threshold", _DEFAULT_RAG_SCORE_THRESHOLD)
 
     # Skip retrieval entirely on an empty index — avoids a pointless query and

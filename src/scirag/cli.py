@@ -397,6 +397,26 @@ def do_show(pmid: str) -> None:
 _LLM_AGENTS = ("synthesizer", "critic", "planner", "retriever")
 
 
+def _ask(question):
+    """Run a questionary prompt, but also let Esc cancel it (returns None).
+
+    Questionary only binds Ctrl-C; we add a non-eager Escape binding (non-eager so
+    it doesn't swallow the escape sequences arrow keys send) that exits with None —
+    which callers already treat as 'cancelled / unchanged'."""
+    from prompt_toolkit.key_binding import KeyBindings, merge_key_bindings
+    from prompt_toolkit.keys import Keys
+
+    extra = KeyBindings()
+
+    @extra.add(Keys.Escape)
+    def _(event):
+        event.app.exit(result=None)
+
+    app = question.application
+    app.key_bindings = merge_key_bindings([app.key_bindings, extra]) if app.key_bindings else extra
+    return question.ask()
+
+
 def do_model(backend_key: str = "") -> None:
     """List available backends or switch all LLM agents to a new backend."""
     from scirag.config import active_backend_key, models_cfg, set_agent_backend
@@ -426,11 +446,13 @@ def do_model(backend_key: str = "") -> None:
         # Pre-select the currently active backend
         default = next((c for c in choices if c.value == current), choices[0])
 
-        selected = questionary.select(
-            "Select LLM backend  (↑↓ to move, enter to confirm):",
-            choices=choices,
-            default=default,
-        ).ask()
+        selected = _ask(
+            questionary.select(
+                "Select LLM backend  (↑↓ to move, enter to confirm · Esc to cancel):",
+                choices=choices,
+                default=default,
+            )
+        )
 
         if selected is None or selected == current:
             console.print("[dim]Unchanged.[/]")
@@ -466,6 +488,154 @@ def do_effort(level: str = "") -> None:
         console.print(f"[dim]Choose one of: {', '.join(_VALID_EFFORT)}[/]")
         return
     console.print(f"Reasoning effort set to [cyan]{get_effort()}[/]")
+
+
+# Live retrieval params the user can tune at runtime. chunk_size/chunk_overlap are
+# deliberately excluded — they only apply at index time, so changing them here
+# would do nothing to already-indexed papers.
+# (name, type, one-line label, full effect help)
+_RAG_PARAMS: list[tuple[str, type, str, str]] = [
+    (
+        "final_k",
+        int,
+        "chunks sent to the LLM",
+        "How many fused chunks become the answer's context. ↑ = better recall but a larger, "
+        "slower prompt to process; ↓ = faster answers with less context. This is the biggest "
+        "single lever on both answer quality and latency.",
+    ),
+    (
+        "top_k",
+        int,
+        "dense (semantic) candidates",
+        "How many embedding-similar chunks the vector search pulls before fusion. ↑ = wider "
+        "net / better recall. Cheap: it does NOT enlarge the prompt — only final_k does.",
+    ),
+    (
+        "bm25_k",
+        int,
+        "sparse (keyword) candidates",
+        "How many BM25 keyword hits the lexical search pulls before fusion. ↑ = better at exact "
+        "terms, acronyms, and gene names. Cheap: does NOT enlarge the prompt.",
+    ),
+    (
+        "hybrid",
+        bool,
+        "dense + BM25 fusion",
+        "On = combine semantic + keyword search via reciprocal-rank fusion (better for exact "
+        "terms). Off = dense/semantic search only.",
+    ),
+    (
+        "rag_score_threshold",
+        float,
+        "grounding gate (0–1)",
+        "Minimum top-chunk similarity required to answer FROM your indexed papers. ↑ = more "
+        "'no relevant sources — answering from general knowledge' fallbacks; ↓ = grounds even "
+        "on weak matches.",
+    ),
+]
+
+
+def _apply_rag(name: str, typ: type, raw, cur: dict) -> None:
+    """Coerce, validate, and set one retrieval param; print before/after."""
+    from scirag.config import set_retrieval_param
+
+    try:
+        val = (
+            (str(raw).strip().lower() in ("1", "true", "on", "yes", "y"))
+            if typ is bool
+            else typ(raw)
+        )
+    except (ValueError, TypeError):
+        console.print(f"[red]Invalid value for {name}:[/] {raw!r}")
+        return
+
+    if typ in (int, float) and val <= 0:
+        console.print(f"[red]{name} must be positive.[/]")
+        return
+    if name == "rag_score_threshold" and not (0.0 <= val <= 1.0):
+        console.print("[red]rag_score_threshold must be between 0 and 1.[/]")
+        return
+
+    old = cur.get(name)
+    set_retrieval_param(name, val)
+    console.print(f"[cyan]{name}[/]: {old} → [cyan]{val}[/]")
+
+    if name == "final_k":
+        cap = cur["top_k"] + (cur["bm25_k"] if cur.get("hybrid") else 0)
+        if val > cap:
+            console.print(
+                f"[yellow]note:[/] final_k ({val}) exceeds the ~{cap} candidates retrieved — "
+                "you'll just get fewer chunks. Raise top_k/bm25_k for more."
+            )
+
+
+def do_rag(arg: str = "") -> None:
+    """Interactively tune the live retrieval parameters, or set one directly.
+
+    `/rag`                 → popup to pick a parameter, with help on what it affects.
+    `/rag final_k 4`       → set one parameter directly (shorthand).
+    """
+    from scirag.config import get_retrieval
+
+    cur = get_retrieval()
+    spec = {name: (typ, label, help) for name, typ, label, help in _RAG_PARAMS}
+
+    # Shorthand: /rag <param> <value>
+    parts = arg.split()
+    if parts:
+        if parts[0] not in spec:
+            console.print(f"[red]Unknown parameter:[/] {parts[0]!r}")
+            console.print(f"[dim]Tunable: {', '.join(spec)}[/]")
+            return
+        if len(parts) >= 2:
+            _apply_rag(parts[0], spec[parts[0]][0], " ".join(parts[1:]), cur)
+            return
+        # single known token → fall through to interactive (pre-select handled below)
+
+    import questionary
+
+    choices = [
+        questionary.Choice(title=f"{name:<20} = {str(cur[name]):<5}  — {label}", value=name)
+        for name, _typ, label, _help in _RAG_PARAMS
+    ]
+    name = _ask(
+        questionary.select(
+            "Tune retrieval parameter  (↑↓ to move, enter to select · Esc to cancel):",
+            choices=choices,
+            default=next((c for c in choices if c.value == parts[0]), None) if parts else None,
+        )
+    )
+    if name is None:
+        console.print("[dim]Unchanged.[/]")
+        return
+
+    typ, _label, help = spec[name]
+    console.print(f"\n[bold cyan]{name}[/]  [dim](current: {cur[name]})[/]")
+    console.print(f"[dim]{help}[/]\n")
+
+    if typ is bool:
+        val = _ask(
+            questionary.select(
+                f"Set {name}  (Esc to cancel):",
+                choices=[
+                    questionary.Choice("on (true)", True),
+                    questionary.Choice("off (false)", False),
+                ],
+                default=bool(cur[name]),
+            )
+        )
+        if val is None:
+            console.print("[dim]Unchanged.[/]")
+            return
+        _apply_rag(name, typ, val, cur)
+    else:
+        raw = _ask(
+            questionary.text(f"New value for {name} (Esc to cancel):", default=str(cur[name]))
+        )
+        if raw is None or raw.strip() == str(cur[name]):
+            console.print("[dim]Unchanged.[/]")
+            return
+        _apply_rag(name, typ, raw, cur)
 
 
 # Conversation history for /llm — lives for the duration of the process.
@@ -856,13 +1026,14 @@ def print_system_info() -> None:
     from rich.panel import Panel
     from rich.table import Table
 
-    from scirag.config import active_backend_key, get_effort, models_cfg
+    from scirag.config import active_backend_key, get_effort, get_retrieval, models_cfg
     from scirag.ingest.index import get_indexed_pmids
     from scirag.projects import get_active_project
 
     emb = models_cfg()["embeddings"]["model"]
     llm_key = active_backend_key("synthesizer")
     llm_model = models_cfg()["backends"][llm_key]["model"]
+    rcfg = get_retrieval()
     project = get_active_project() or "none (global)"
     cwd = Path.cwd()
 
@@ -887,6 +1058,11 @@ def print_system_info() -> None:
     grid.add_column()
     grid.add_row("llm", f"[cyan]{llm_model}[/]  [dim]· effort {get_effort()}[/]")
     grid.add_row("embedding", f"[dim]{emb}[/]")
+    grid.add_row(
+        "retrieval",
+        f"[dim]final_k {rcfg['final_k']} · top_k {rcfg['top_k']} · bm25_k {rcfg['bm25_k']} · "
+        f"hybrid {'on' if rcfg.get('hybrid') else 'off'} · threshold {rcfg['rag_score_threshold']}[/]",
+    )
     grid.add_row("ollama", ollama)
     grid.add_row(
         "project",
@@ -1122,6 +1298,12 @@ def effort(
 ):
     """Show or set the LLM reasoning effort (speed vs. accuracy)."""
     do_effort(level)
+
+
+@app.command()
+def rag(params: list[str] = typer.Argument(None, help="Optional <param> <value> to set directly.")):
+    """Tune retrieval parameters (final_k, top_k, …). No args = interactive picker."""
+    do_rag(" ".join(params) if params else "")
 
 
 @app.command(name="clear-db")
