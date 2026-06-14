@@ -46,18 +46,23 @@ dense + BM25 retrieval with optional cross-encoder reranking) and **LiteLLM**
 
 ## Install
 
-**Just use it** — installs the `scirag` command (and all dependencies) into an
-isolated environment, no checkout needed:
+**Just use it** — installs the `scirag` command into an isolated environment, no
+checkout needed. The `[all]` extra pulls every optional feature (web UI, MCP
+server, eval, cross-encoder reranking):
 
 ```
-uv tool install git+https://github.com/ytsimon2004/scirag-agent
+uv tool install "scirag-agent[all] @ git+https://github.com/ytsimon2004/scirag-agent"
 ```
+
+The bare install (`uv tool install git+https://github.com/ytsimon2004/scirag-agent`)
+omits the extras — see [Optional extras](#optional-extras) to pick a subset.
+`[all]`/`[rerank]` pull sentence-transformers + torch, so they're a larger download.
 
 **Develop on it** — editable checkout with dev tooling (ruff/pre-commit/pytest):
 
 ```
 git clone https://github.com/ytsimon2004/scirag-agent && cd scirag-agent
-uv sync
+uv sync --extra all
 ```
 
 **Embeddings (always required) — Ollama.** Indexing and retrieval use a local
@@ -81,10 +86,17 @@ ollama pull bge-m3                         # embeddings (~1.2 GB)
 
 So the qwen download is optional — only needed if you want a local LLM.
 
-Optional extras:
-- Web UI: `uv sync --extra ui`
-- Cross-encoder reranking (`bge-reranker-v2-m3`, pulls sentence-transformers + torch):
-  `uv sync --extra rerank` — then enable with `/rag rerank on`.
+### Optional extras
+
+Installed together via `[all]` above, or pick a subset (tool install:
+`"scirag-agent[ui,rerank] @ git+…"`; dev checkout: `uv sync --extra ui --extra rerank`):
+
+| Extra | Enables |
+|---|---|
+| `ui` | Chainlit web UI (`/llm-ui`) |
+| `rerank` | Cross-encoder reranking (`bge-reranker-v2-m3`); then `/rag rerank on`. Pulls torch |
+| `mcp` | MCP server exposing retrieval as tools |
+| `eval` | RAG evaluation (ragas) |
 
 ---
 
