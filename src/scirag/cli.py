@@ -448,6 +448,26 @@ def do_model(backend_key: str = "") -> None:
     console.print(f"Switched to [cyan]{backend_key}[/]  [dim]({spec['model']})[/]")
 
 
+def do_effort(level: str = "") -> None:
+    """Show or set the session reasoning effort (low/medium/high)."""
+    from scirag.config import _VALID_EFFORT, get_effort, set_effort
+
+    if not level:
+        console.print(
+            f"Reasoning effort: [cyan]{get_effort()}[/]  "
+            f"[dim](options: {' / '.join(_VALID_EFFORT)} — higher = slower, more thorough)[/]"
+        )
+        return
+
+    try:
+        set_effort(level.lower())
+    except ValueError:
+        console.print(f"[red]Unknown effort:[/] {level!r}")
+        console.print(f"[dim]Choose one of: {', '.join(_VALID_EFFORT)}[/]")
+        return
+    console.print(f"Reasoning effort set to [cyan]{get_effort()}[/]")
+
+
 # Conversation history for /llm — lives for the duration of the process.
 _llm_history: list[dict[str, str]] = []
 
@@ -467,21 +487,48 @@ def _source_summary(nodes) -> str:
     )
 
 
-def _answer_with_spinner(messages: list[dict[str, str]], *, max_tokens: int = 1200) -> str:
-    """Run the synthesizer call behind a live 'Reasoning…' spinner so the long
-    wait shows progress instead of a frozen screen. Returns the answer text."""
+def _answer_with_spinner(messages: list[dict[str, str]], *, max_tokens: int | None = None) -> str:
+    """Run the synthesizer call behind a live 'Reasoning…' spinner that counts up
+    elapsed seconds, so the long wait shows progress instead of a frozen screen.
+    Returns the answer text.
+
+    The blocking completion runs in a worker thread while the main thread refreshes
+    the timer. With max_tokens left None, the router sizes the budget from the
+    session effort."""
+    import threading
+    import time
+
     from rich.text import Text
 
     from scirag.llm.router import complete
 
-    with console.status(Text("Reasoning…", style="dim"), spinner="dots"):
-        return complete("synthesizer", messages, max_tokens=max_tokens)
+    out: dict = {}
+
+    def _run() -> None:
+        try:
+            out["answer"] = complete("synthesizer", messages, max_tokens=max_tokens)
+        except BaseException as exc:  # propagate to the caller below
+            out["error"] = exc
+
+    worker = threading.Thread(target=_run, daemon=True)
+    t0 = time.perf_counter()
+    with console.status(Text("Reasoning… 0.0s", style="dim"), spinner="dots") as status:
+        worker.start()
+        while worker.is_alive():
+            status.update(Text(f"Reasoning… {time.perf_counter() - t0:.1f}s", style="dim"))
+            worker.join(timeout=0.1)
+
+    if "error" in out:
+        raise out["error"]
+    return out["answer"]
 
 
 def do_llm(query: str, *, reset: bool = False) -> None:
     """RAG-grounded answer with a one-line source summary and conversation memory.
 
     Full source passages (with snippets and links) live in the web UI (/llm-ui)."""
+    import time
+
     from rich.rule import Rule
     from scirag.agents.pipeline import prepare_answer
 
@@ -500,15 +547,22 @@ def do_llm(query: str, *, reset: bool = False) -> None:
             f"[dim]No relevant sources (top score {result.top_score:.2f}) — answering from general knowledge.[/]"
         )
 
-    answer = _answer_with_spinner(result.messages, max_tokens=1200)
+    t0 = time.perf_counter()
+    answer = _answer_with_spinner(result.messages)
+    elapsed = time.perf_counter() - t0
 
     # Persist turn in history (store the bare question, not the full sources block)
     _llm_history.append({"role": "user", "content": f"Question: {query}"})
     _llm_history.append({"role": "assistant", "content": answer})
 
+    from scirag.config import get_effort
+
     console.print(Rule("[dim]Answer[/]", style="dim"))
     console.print(Markdown(answer))
-    console.print(f"\n[dim](conversation turn {len(_llm_history) // 2} — /llm --reset to clear)[/]")
+    console.print(
+        f"\n[dim](effort {get_effort()} · {elapsed:.1f}s · turn {len(_llm_history) // 2} "
+        "— /llm --reset to clear)[/]"
+    )
 
 
 def do_import_pdf(path: str) -> None:
@@ -802,7 +856,7 @@ def print_system_info() -> None:
     from rich.panel import Panel
     from rich.table import Table
 
-    from scirag.config import active_backend_key, models_cfg
+    from scirag.config import active_backend_key, get_effort, models_cfg
     from scirag.ingest.index import get_indexed_pmids
     from scirag.projects import get_active_project
 
@@ -831,7 +885,7 @@ def print_system_info() -> None:
     grid = Table.grid(padding=(0, 2))
     grid.add_column(style="dim", no_wrap=True, min_width=11)
     grid.add_column()
-    grid.add_row("llm", f"[cyan]{llm_model}[/]")
+    grid.add_row("llm", f"[cyan]{llm_model}[/]  [dim]· effort {get_effort()}[/]")
     grid.add_row("embedding", f"[dim]{emb}[/]")
     grid.add_row("ollama", ollama)
     grid.add_row(
@@ -1060,6 +1114,14 @@ def text_index():
 def model(backend_key: str = typer.Argument("", help="Backend key to switch to. Omit to list.")):
     """List available LLM backends or switch the active model."""
     do_model(backend_key)
+
+
+@app.command()
+def effort(
+    level: str = typer.Argument("", help="Reasoning effort: low/medium/high. Omit to show."),
+):
+    """Show or set the LLM reasoning effort (speed vs. accuracy)."""
+    do_effort(level)
 
 
 @app.command(name="clear-db")

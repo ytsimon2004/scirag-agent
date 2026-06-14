@@ -59,10 +59,26 @@ def pipeline_cfg() -> dict[str, Any]:
 
 _runtime_backend: dict[str, str] = {}  # agent -> backend key, overrides models.yaml
 
+_VALID_EFFORT = ("low", "medium", "high")
+_runtime_effort: str = "medium"  # session-only reasoning effort, resets each launch
+
 
 def set_agent_backend(agent: str, backend_key: str) -> None:
     """Override the backend for an agent for this session (does not modify models.yaml)."""
     _runtime_backend[agent] = backend_key
+
+
+def set_effort(level: str) -> None:
+    """Set the session reasoning effort (low/medium/high). Raises on bad input."""
+    if level not in _VALID_EFFORT:
+        raise ValueError(f"effort must be one of {_VALID_EFFORT}, got {level!r}")
+    global _runtime_effort
+    _runtime_effort = level
+
+
+def get_effort() -> str:
+    """Return the current session reasoning effort."""
+    return _runtime_effort
 
 
 def backend_for(agent: str) -> dict[str, Any]:

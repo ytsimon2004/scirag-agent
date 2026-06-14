@@ -116,7 +116,7 @@ async def on_message(message: cl.Message) -> None:
     await answer_msg.send()
 
     answer = ""
-    async for token in complete_stream("synthesizer", result.messages, max_tokens=1200):
+    async for token in complete_stream("synthesizer", result.messages):
         answer += token
         await answer_msg.stream_token(token)
     await answer_msg.update()

@@ -35,6 +35,7 @@ _COMMANDS: list[tuple[str, str, str]] = [
     ("/llm", "[<question>] [--reset]", "RAG answer; bare /llm = sticky conversation mode"),
     ("/llm-ui", "[--port N]", "open Chainlit web UI in browser (click-to-expand sources)"),
     ("/model", "[backend-key]", "list or switch LLM backend"),
+    ("/effort", "[low|medium|high]", "set LLM reasoning effort (speed vs. accuracy)"),
     ("/import", "<path>", "index a PDF file, or every PDF in a directory"),
     ("/text", "", "index free-form text (prompts for title, identifier, origin, year, author)"),
     ("/env", "[set <KEY> <val> | unset <KEY>]", "manage API keys in ~/.scirag-agent/.env"),
@@ -498,6 +499,11 @@ def _dispatch(line: str, session: PromptSession) -> None:
         from scirag.cli import do_model
 
         do_model(query)
+
+    elif cmd == "/effort":
+        from scirag.cli import do_effort
+
+        do_effort(query)
 
     elif cmd == "/import":
         if not query:

@@ -28,6 +28,12 @@ the `claude`/`codex` CLIs) — sit behind one LiteLLM router, selectable per age
   reserve a reasoning model (`local-deepseek-r1-32b`) for where it earns its cost.
 - Swap models per agent in `configs/models.yaml` (or at runtime with `scirag model`),
   never in code.
+- `scirag effort low|medium|high` (or `/effort` in the shell) tunes reasoning depth vs.
+  speed for the session. The router maps it per backend (`llm/router.py`): Ollama thinking
+  models toggle `think` (low = off); Claude/OpenAI APIs use litellm's `reasoning_effort`;
+  the CLI backends pass it through too (`claude -p --effort`, `codex -c
+  model_reasoning_effort`). Effort also scales the answer token budget. Session-only,
+  defaults to `medium`.
 
 ## Hardware
 - **Mac (36 GB unified)** is the primary local inference box — run Qwen3-14B (q4) +
@@ -70,6 +76,7 @@ scirag llm "How do place cells remap across environments?"   # grounded, cited a
 scirag llm-ui                                   # Chainlit web UI (needs --extra ui)
 scirag import path/to/paper.pdf                 # index a PDF (or a dir of PDFs)
 scirag model                                    # list backends; pass a key to switch
+scirag effort high                              # set reasoning effort (low/medium/high)
 scirag show <pmid|doi>                           # print a stored record's text
 scirag env set NCBI_API_KEY <key>               # manage API keys in ~/.scirag-agent/.env
 uv run python -m scirag.mcp_server.server       # MCP server (needs --extra mcp)
