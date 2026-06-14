@@ -51,5 +51,11 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/scirag"]
 
+# Ship the default YAML configs inside the package so a `uv tool install` (no
+# source checkout on disk) can still load them; config.py resolves these as the
+# fallback after the dev tree and ~/.scirag-agent/configs overrides.
+[tool.hatch.build.targets.wheel.force-include]
+"configs" = "scirag/configs"
+
 [tool.ruff]
 line-length = 100

@@ -4,24 +4,46 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
+from importlib import resources
 from pathlib import Path
 from typing import Any
 
 import yaml
 from dotenv import load_dotenv
 
-_HOME_ENV = Path.home() / ".scirag-agent" / ".env"
+_USER_DIR = Path.home() / ".scirag-agent"
+_HOME_ENV = _USER_DIR / ".env"
 load_dotenv(_HOME_ENV)  # primary user config
 load_dotenv(override=True)  # local .env overrides (dev use)
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def _load_yaml(path: str | Path) -> dict[str, Any]:
+def _resolve_config(path: str | Path) -> Path:
+    """Locate a config file. Absolute paths are used as-is; relative paths
+    (e.g. ``configs/models.yaml``) are searched, in order:
+
+    1. the dev checkout — ``<repo>/configs/...`` (only present when run from source),
+    2. a user override — ``~/.scirag-agent/configs/...``,
+    3. the default shipped inside the installed package — ``scirag/configs/...``.
+
+    This is what lets the tool-installed `scirag` command run with no checkout
+    on disk while a source checkout still picks up edits to ``./configs``.
+    """
     p = Path(path)
-    if not p.is_absolute():
-        p = ROOT / p
-    with open(p) as fh:
+    if p.is_absolute():
+        return p
+    dev = ROOT / p
+    if dev.exists():
+        return dev
+    user = _USER_DIR / p
+    if user.exists():
+        return user
+    return Path(resources.files("scirag").joinpath(*p.parts))
+
+
+def _load_yaml(path: str | Path) -> dict[str, Any]:
+    with open(_resolve_config(path)) as fh:
         return yaml.safe_load(fh)
 
 

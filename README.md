@@ -45,8 +45,17 @@ dense + BM25 retrieval) and **LiteLLM** (one router across local and frontier LL
 
 ## Install
 
+**Just use it** — installs the `scirag` command (and all dependencies) into an
+isolated environment, no checkout needed:
+
 ```
-git clone <repo> && cd scireg
+uv tool install git+https://github.com/ytsimon2004/scirag-agent
+```
+
+**Develop on it** — editable checkout with dev tooling (ruff/pre-commit/pytest):
+
+```
+git clone https://github.com/ytsimon2004/scirag-agent && cd scirag-agent
 uv sync
 ```
 

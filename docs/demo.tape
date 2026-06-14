@@ -17,7 +17,7 @@ Sleep 5s
 # ── Index ──────────────────────────────────────────────────────────────────
 Type `/index "anterior and posterior differences in rodent retrosplenial cortex" --year-from 2025 --retmax 5`
 Enter
-Sleep 6s
+Sleep 10s
 
 # ── Select first two papers ──────────────────────────────────────────────────
 # All 5 papers start pre-checked; invert to clear all, then pick #1 and #2
@@ -40,7 +40,7 @@ Sleep 3s
 # ── LLM ───────────────────────────────────────────────────────────────────────
 Type `/llm "What distinguishes anterior from posterior RSC?"`
 Enter
-Sleep 60s
+Sleep 70s
 
 Type "/exit"
 Enter
