@@ -292,6 +292,13 @@ def _download_pdf_results(url: str) -> str:
 
         r = httpx.get(url, timeout=60, follow_redirects=True)
         r.raise_for_status()
+        # Unpaywall's "OA location" is often a publisher landing page or paywall
+        # (HTML), not a real PDF. Bail before pypdf chokes on it and prints
+        # "invalid pdf header" / "EOF marker not found" to the console.
+        ctype = r.headers.get("content-type", "").lower()
+        looks_like_pdf = "pdf" in ctype or r.content.lstrip()[:5] == b"%PDF-"
+        if not looks_like_pdf:
+            return ""
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
             f.write(r.content)
             tmp = Path(f.name)
