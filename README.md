@@ -60,6 +60,9 @@ any extra comma-separated, e.g. `scirag-agent[ui,rerank]`. The only heavy one is
 the ~6 GB CUDA stack — the reranker just re-scores candidates; all real inference
 runs through Ollama). See [Optional extras](#optional-extras).
 
+> Once scirag is published to PyPI, this becomes a plain `uv tool install
+> "scirag-agent[ui]"` (or `pip install "scirag-agent[ui]"`) — no git URL needed.
+
 **Develop on it** — editable checkout with dev tooling (ruff/pre-commit/pytest):
 
 ```
