@@ -16,6 +16,10 @@ import httpx
 
 EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 UNPAYWALL = "https://api.unpaywall.org/v2"
+# Europe PMC indexes MEDLINE/PubMed (SRC:MED) with a relevance-ranked search that,
+# unlike NCBI esearch, tolerates natural-language phrasing — it won't misread
+# "in human" as an author. Used by search_semantic() to acquire PubMed PMIDs.
+EPMC = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
 
 
 def _get(path: str, params: dict, *, timeout: float, retries: int = 3) -> httpx.Response:
@@ -135,6 +139,59 @@ def search(
     return [e.text for e in root.findall(".//IdList/Id") if e.text]
 
 
+def search_semantic(
+    query: str,
+    retmax: int = 25,
+    min_year: str = "",
+    max_year: str = "",
+) -> list[str]:
+    """Relevance-ranked PMID search via Europe PMC (SRC:MED) — natural-language friendly.
+
+    NCBI esearch maps each token to a field, so a plain-English question like
+    "retrosplenial cortex related disorder in human" gets mangled (the trailing
+    "in human" becomes an [Author] clause) and returns nothing. Europe PMC ranks
+    the same words by relevance over MEDLINE/PubMed records and ignores the noise,
+    so a sentence works. It returns PMIDs, which fetch() then expands exactly as
+    the esearch path does — dedup, full-text, and the picker are all unchanged.
+    """
+    q = f"({query}) AND SRC:MED"
+    if min_year or max_year:
+        start = f"{min_year}-01-01" if min_year else "1000-01-01"
+        end = f"{max_year}-12-31" if max_year else "3000-12-31"
+        q += f" AND (FIRST_PDATE:[{start} TO {end}])"
+    last: Exception | None = None
+    for attempt in range(3):
+        try:
+            r = httpx.get(
+                EPMC,
+                params={
+                    "query": q,
+                    "format": "json",
+                    "resultType": "lite",
+                    "pageSize": min(retmax, 100),
+                },
+                timeout=30,
+            )
+            r.raise_for_status()
+            break
+        except httpx.HTTPStatusError as e:
+            last = e
+            if e.response.status_code not in (429, 500, 502, 503):
+                raise
+            time.sleep(2**attempt)
+    else:
+        raise RuntimeError(f"Europe PMC unavailable after 3 tries: {last}")
+
+    seen: set[str] = set()
+    pmids: list[str] = []
+    for rec in r.json().get("resultList", {}).get("result", []):
+        pmid = rec.get("pmid")
+        if pmid and pmid not in seen:
+            seen.add(pmid)
+            pmids.append(pmid)
+    return pmids[:retmax]
+
+
 def fetch(pmids: list[str]) -> list[Article]:
     """efetch -> parsed Article records."""
     if not pmids:
@@ -204,6 +261,16 @@ def search_and_fetch(
     max_year: str = "",
 ) -> list[Article]:
     return fetch(search(query, retmax=retmax, min_year=min_year, max_year=max_year))
+
+
+def search_and_fetch_semantic(
+    query: str,
+    retmax: int = 25,
+    min_year: str = "",
+    max_year: str = "",
+) -> list[Article]:
+    """Like search_and_fetch, but via Europe PMC relevance search (see search_semantic)."""
+    return fetch(search_semantic(query, retmax=retmax, min_year=min_year, max_year=max_year))
 
 
 # ---------------------------------------------------------------------------

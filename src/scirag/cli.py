@@ -162,12 +162,19 @@ def do_index(
     full_text: bool = False,
     year_from: str = "",
     year_to: str = "",
+    semantic: bool = False,
 ) -> None:
     import questionary
     from scirag.ingest.index import build_index, get_indexed_pmids
     from scirag.sources.pubmed import _pmids_to_pmcids
 
-    arts = pubmed.search_and_fetch(query, retmax=retmax, min_year=year_from, max_year=year_to)
+    if semantic:
+        console.print("[dim]Searching PubMed via Europe PMC relevance ranking…[/]")
+        arts = pubmed.search_and_fetch_semantic(
+            query, retmax=retmax, min_year=year_from, max_year=year_to
+        )
+    else:
+        arts = pubmed.search_and_fetch(query, retmax=retmax, min_year=year_from, max_year=year_to)
     if not arts:
         console.print("[yellow]No results.[/]")
         return
@@ -1384,6 +1391,10 @@ _DAYS_BACK_HELP = "how many days back to search bioRxiv (via Europe PMC)"
 _FULL_TEXT_HELP = "also fetch + index each paper's full-text Results section (slower)"
 _YEAR_FROM_HELP = "earliest publication year to include (e.g. 2018)"
 _YEAR_TO_HELP = "latest publication year to include (e.g. 2024)"
+_SEMANTIC_HELP = (
+    "search PubMed by relevance via Europe PMC instead of NCBI esearch — "
+    "tolerates natural-language questions (e.g. 'disorders of the retrosplenial cortex in humans')"
+)
 
 
 @app.command()
@@ -1393,9 +1404,10 @@ def index(
     full_text: bool = typer.Option(False, help=_FULL_TEXT_HELP),
     year_from: str = typer.Option("", help=_YEAR_FROM_HELP),
     year_to: str = typer.Option("", help=_YEAR_TO_HELP),
+    semantic: bool = typer.Option(False, help=_SEMANTIC_HELP),
 ):
     """Fetch, preview, select, and index PubMed articles interactively."""
-    do_index(query, retmax, full_text, year_from=year_from, year_to=year_to)
+    do_index(query, retmax, full_text, year_from=year_from, year_to=year_to, semantic=semantic)
 
 
 @app.command()
@@ -1407,7 +1419,12 @@ def bindex(
     year_from: str = typer.Option("", help=_YEAR_FROM_HELP),
     year_to: str = typer.Option("", help=_YEAR_TO_HELP),
 ):
-    """Fetch, preview, select, and index bioRxiv preprints interactively."""
+    """Fetch, preview, select, and index bioRxiv preprints interactively.
+
+    Search is relevance-ranked via Europe PMC, so a natural-language question works
+    directly — no Boolean syntax and no --semantic flag (unlike `index`, this path
+    never used NCBI esearch).
+    """
     do_bindex(query, retmax, days_back, full_text, year_from=year_from, year_to=year_to)
 
 

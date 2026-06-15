@@ -67,11 +67,18 @@ the `claude`/`codex` CLIs) — sit behind one LiteLLM router, selectable per age
   retrieval -> relevance gating -> grounded-prompt assembly.
 - `src/scirag/agents/synthesize.py` — cited-answer synthesis agent.
 - `src/scirag/sources/pubmed.py` — NCBI E-utilities client (`Article` dataclass).
+  `search()` is keyword esearch (Boolean/field syntax); `search_semantic()` ranks the
+  same PubMed corpus by relevance via Europe PMC (`SRC:MED`) so a natural-language
+  question works (esearch would mangle it — e.g. read "in human" as an `[Author]`).
+  Both return PMIDs, so `fetch()` and everything downstream are identical.
 - `src/scirag/sources/biorxiv.py` — bioRxiv source; keyword search via Europe PMC
   (the bioRxiv API has no search endpoint), direct-DOI metadata via the bioRxiv API,
   and full-text Results from the JATS XML — fetched with `curl_cffi` browser
   impersonation since biorxiv.org's full-text host is Cloudflare-gated. Builds the
   same `Article` with the preprint DOI in the `pmid` slot and `source="biorxiv"`.
+  Because that keyword search *is* Europe PMC relevance ranking, `bindex` accepts a
+  natural-language question directly (no Boolean syntax) — it never had PubMed's
+  esearch problem, so there's no `--semantic` flag to add (it's effectively always on).
 - `src/scirag/sources/pdf.py` — PDF ingestion: resolve a PDF to its source record +
   isolate the Results section.
 - `src/scirag/sources/mendeley.py` — import from the local Mendeley Reference Manager
@@ -91,7 +98,9 @@ the `claude`/`codex` CLIs) — sit behind one LiteLLM router, selectable per age
 ```
 scirag                                          # interactive shell (no args)
 scirag index --retmax 30                        # interactively fetch/select/index PubMed
+scirag index "disorders of the retrosplenial cortex in humans" --semantic  # relevance search (accepts sentences)
 scirag bindex --days-back 180 --full-text       # interactively index bioRxiv preprints
+scirag bindex "how do place cells remap across environments"  # bioRxiv is always relevance-ranked — sentences work, no flag needed
 scirag retrieve "place cells remapping"         # show retrieved chunks, no LLM
 scirag llm "How do place cells remap across environments?"   # grounded, cited answer
 scirag llm-ui                                   # Chainlit web UI (needs --extra ui)

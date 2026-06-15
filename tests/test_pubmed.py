@@ -18,6 +18,7 @@ from scirag.sources.pubmed import (
     fetch,
     search,
     search_and_fetch,
+    search_semantic,
 )
 
 
@@ -258,6 +259,42 @@ def test_search_and_fetch(mock_get):
     articles = search_and_fetch("grid cells entorhinal cortex", retmax=5)
     assert isinstance(articles, list)
     assert mock_get.call_count == 2
+
+
+def _mock_json_response(payload: dict) -> MagicMock:
+    r = MagicMock()
+    r.json = MagicMock(return_value=payload)
+    r.raise_for_status = MagicMock()
+    return r
+
+
+@patch("scirag.sources.pubmed.httpx.get")
+def test_search_semantic_returns_pmids(mock_get):
+    mock_get.return_value = _mock_json_response(
+        {"resultList": {"result": [{"pmid": "11111"}, {"pmid": "22222"}, {"pmid": "11111"}]}}
+    )
+    pmids = search_semantic("retrosplenial cortex related disorder in human", retmax=5)
+    assert pmids == ["11111", "22222"]  # deduped, relevance order preserved
+    url = mock_get.call_args[0][0]
+    query = mock_get.call_args.kwargs["params"]["query"]
+    assert "europepmc" in url
+    assert "SRC:MED" in query
+
+
+@patch("scirag.sources.pubmed.httpx.get")
+def test_search_semantic_year_filter(mock_get):
+    mock_get.return_value = _mock_json_response({"resultList": {"result": []}})
+    search_semantic("place cells", min_year="2018", max_year="2024")
+    query = mock_get.call_args.kwargs["params"]["query"]
+    assert "FIRST_PDATE:[2018-01-01 TO 2024-12-31]" in query
+
+
+@patch("scirag.sources.pubmed.httpx.get")
+def test_search_semantic_skips_records_without_pmid(mock_get):
+    mock_get.return_value = _mock_json_response(
+        {"resultList": {"result": [{"id": "PPR1"}, {"pmid": "33333"}]}}
+    )
+    assert search_semantic("query") == ["33333"]
 
 
 # ---------------------------------------------------------------------------

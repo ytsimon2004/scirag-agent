@@ -14,8 +14,15 @@ mcp = FastMCP("scirag")
 
 
 @mcp.tool()
-def search_pubmed(query: str, retmax: int = 25) -> list[dict]:
-    """Search PubMed and return article metadata (pmid, title, abstract, year)."""
+def search_pubmed(query: str, retmax: int = 25, semantic: bool = False) -> list[dict]:
+    """Search PubMed and return article metadata (pmid, title, abstract, year).
+
+    By default uses NCBI esearch (Boolean/field syntax). Set `semantic=True` to rank
+    by relevance via Europe PMC instead — this tolerates natural-language questions
+    that esearch mangles (e.g. it won't misread a trailing "in human" as an author),
+    so prefer it when passing a plain-English query rather than Boolean terms.
+    """
+    fetch = pubmed.search_and_fetch_semantic if semantic else pubmed.search_and_fetch
     return [
         {
             "pmid": a.pmid,
@@ -26,7 +33,7 @@ def search_pubmed(query: str, retmax: int = 25) -> list[dict]:
             "url": a.url,
             "mesh": a.mesh_terms,
         }
-        for a in pubmed.search_and_fetch(query, retmax=retmax)
+        for a in fetch(query, retmax=retmax)
     ]
 
 

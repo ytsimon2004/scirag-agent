@@ -22,13 +22,13 @@ console = Console()
 _COMMANDS: list[tuple[str, str, str]] = [
     (
         "/index",
-        "<query> [--retmax N] [--full-text] [--year-from YYYY] [--year-to YYYY]",
-        "fetch + select + index PubMed articles",
+        "<query> [--retmax N] [--full-text] [--semantic] [--year-from YYYY] [--year-to YYYY]",
+        "fetch + select + index PubMed articles (--semantic: relevance search, accepts sentences)",
     ),
     (
         "/bindex",
         "<query> [--retmax N] [--days-back N] [--full-text] [--year-from YYYY] [--year-to YYYY]",
-        "fetch + select + index bioRxiv preprints",
+        "fetch + select + index bioRxiv preprints (relevance search, accepts sentences)",
     ),
     ("/retrieve", "<query>", "query local index (no LLM)"),
     ("/show", "<pmid>", "print a paper's stored abstract/results text"),
@@ -440,7 +440,7 @@ def _dispatch(line: str, session: PromptSession) -> None:
     if cmd == "/index":
         if not query:
             console.print(
-                "[yellow]Usage:[/] /index <query> [--retmax N] [--full-text] [--year-from YYYY] [--year-to YYYY]"
+                "[yellow]Usage:[/] /index <query> [--retmax N] [--full-text] [--semantic] [--year-from YYYY] [--year-to YYYY]"
             )
             return
         from scirag.cli import do_index
@@ -451,6 +451,7 @@ def _dispatch(line: str, session: PromptSession) -> None:
             full_text="full-text" in flags or "full_text" in flags,
             year_from=flags.get("year-from", flags.get("year_from", "")),
             year_to=flags.get("year-to", flags.get("year_to", "")),
+            semantic="semantic" in flags,
         )
 
     elif cmd == "/bindex":
