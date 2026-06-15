@@ -7,7 +7,7 @@ Set Height 700
 Set Theme "Catppuccin Mocha"
 Set Padding 24
 Set TypingSpeed 50ms
-Set PlaybackSpeed 1.5
+Set PlaybackSpeed 1.25
 
 # ── Launch ──────────────────────────────────────────────────────────────────
 Type "scirag"
@@ -15,7 +15,7 @@ Enter
 Sleep 5s
 
 # ── Index ──────────────────────────────────────────────────────────────────
-Type `/index "anterior and posterior differences in rodent retrosplenial cortex" --year-from 2025 --retmax 5`
+Type `/index "anterior and posterior differences in rodent retrosplenial cortex" --retmax 5`
 Enter
 Sleep 10s
 
@@ -37,11 +37,21 @@ Type "/status"
 Enter
 Sleep 3s
 
+# ── Selection ───────────────────────────────────────────────────────────────────────
+Type "/model"
+Enter
+Sleep 2s
+Down
+Sleep 300ms
+Down
+Sleep 300ms
+Down
+Sleep 300ms
+Enter
+Sleep 3s
+
+
 # ── LLM ───────────────────────────────────────────────────────────────────────
 Type `/llm "What distinguishes anterior from posterior RSC?"`
 Enter
-Sleep 70s
-
-Type "/exit"
-Enter
-Sleep 1s
+Sleep 20s
