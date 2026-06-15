@@ -47,16 +47,18 @@ dense + BM25 retrieval with optional cross-encoder reranking) and **LiteLLM**
 ## Install
 
 **Just use it** — installs the `scirag` command into an isolated environment, no
-checkout needed. The `[all]` extra pulls every optional feature (web UI, MCP
-server, eval, cross-encoder reranking):
+checkout needed. Most users just want the web UI:
 
 ```
-uv tool install "scirag-agent[all] @ git+https://github.com/ytsimon2004/scirag-agent"
+uv tool install "scirag-agent[ui] @ git+https://github.com/ytsimon2004/scirag-agent"
 ```
 
 The bare install (`uv tool install git+https://github.com/ytsimon2004/scirag-agent`)
-omits the extras — see [Optional extras](#optional-extras) to pick a subset.
-`[all]`/`[rerank]` pull sentence-transformers + torch, so they're a larger download.
+gives the CLI + interactive shell with no extras. Everything else is optional — add
+any extra comma-separated, e.g. `scirag-agent[ui,rerank]`. The only heavy one is
+`rerank` (sentence-transformers + torch, pinned to the **CPU** build so ~1 GB, not
+the ~6 GB CUDA stack — the reranker just re-scores candidates; all real inference
+runs through Ollama). See [Optional extras](#optional-extras).
 
 **Develop on it** — editable checkout with dev tooling (ruff/pre-commit/pytest):
 
@@ -88,8 +90,9 @@ So the qwen download is optional — only needed if you want a local LLM.
 
 ### Optional extras
 
-Installed together via `[all]` above, or pick a subset (tool install:
-`"scirag-agent[ui,rerank] @ git+…"`; dev checkout: `uv sync --extra ui --extra rerank`):
+Pick whichever you need (tool install: `"scirag-agent[ui,rerank] @ git+…"`; dev
+checkout: `uv sync --extra ui --extra rerank`). The `[all]` extra is a shorthand for
+the light ones (`ui`, `mcp`, `eval`) — `rerank` is deliberately left out of it:
 
 | Extra | Enables |
 |---|---|
