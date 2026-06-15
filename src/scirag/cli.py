@@ -1223,6 +1223,56 @@ def do_status() -> None:
     console.print(f"\n[dim]{n_full} with full text, {len(articles) - n_full} abstract-only.[/]")
 
 
+# CSV columns for /export — (header, row-key). `id` is the primary key (PMID for
+# PubMed, DOI for bioRxiv preprints), matching what /status and citations show.
+_EXPORT_COLUMNS: list[tuple[str, str]] = [
+    ("id", "pmid"),
+    ("origin", "origin"),
+    ("year", "year"),
+    ("first_author", "first_author"),
+    ("authors", "authors"),
+    ("title", "title"),
+    ("journal", "journal"),
+    ("doi", "doi"),
+    ("url", "url"),
+    ("mesh", "mesh"),
+    ("text_source", "text_source"),
+]
+
+
+def do_export(path: str = "") -> None:
+    """Export the active project's indexed papers' metadata to a CSV file.
+
+    Default output is ./scirag-<project>.csv (or scirag-global.csv when no project
+    is active). A directory argument writes that default name inside it."""
+    import csv
+
+    from scirag.ingest.index import get_indexed_articles_full
+    from scirag.projects import get_active_project
+
+    rows = get_indexed_articles_full()
+    if not rows:
+        console.print("[yellow]Index is empty — nothing to export.[/]")
+        return
+
+    project = get_active_project() or "global"
+    default_name = f"scirag-{project}.csv"
+    out = Path(path).expanduser() if path else Path.cwd() / default_name
+    if out.is_dir():
+        out = out / default_name
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    with out.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow([header for header, _ in _EXPORT_COLUMNS])
+        for r in sorted(rows, key=lambda x: x["year"], reverse=True):
+            writer.writerow([r.get(key, "") for _, key in _EXPORT_COLUMNS])
+
+    console.print(
+        f"[green]Exported {len(rows)} record(s)[/] from [yellow]{project}[/] → [cyan]{out}[/]"
+    )
+
+
 def do_remove(pmids: list[str]) -> None:
     import questionary
     from scirag.ingest.index import get_indexed_articles, remove_articles
@@ -1426,6 +1476,14 @@ def rag(params: list[str] = typer.Argument(None, help="Optional <param> <value> 
 def clear_db(force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt.")):
     """Delete the entire local index (irreversible)."""
     do_clear_db(force=force)
+
+
+@app.command()
+def export(
+    path: str = typer.Argument("", help="Output CSV path (default: ./scirag-<project>.csv)."),
+):
+    """Export the active project's indexed papers' metadata to CSV."""
+    do_export(path)
 
 
 @app.command(name="delete-project")

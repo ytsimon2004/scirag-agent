@@ -42,6 +42,7 @@ _COMMANDS: list[tuple[str, str, str]] = [
     ("/text", "", "index free-form text (prompts for title, identifier, origin, year, author)"),
     ("/env", "[set <KEY> <val> | unset <KEY>]", "manage API keys in ~/.scirag-agent/.env"),
     ("/status", "", "show index statistics"),
+    ("/export", "[path]", "export indexed papers' metadata to CSV"),
     ("/remove", "[pmid ...]", "remove article(s) from the index (interactive if no args)"),
     ("/clear-db", "[--force]", "delete the active index"),
     ("/create-project", "<name> [description]", "create a new project and switch to it"),
@@ -329,6 +330,12 @@ def _dispatch(line: str, session: PromptSession) -> None:
         from scirag.cli import do_status
 
         do_status()
+        return
+
+    if cmd == "/export":
+        from scirag.cli import do_export
+
+        do_export(query)
         return
 
     if cmd == "/remove":

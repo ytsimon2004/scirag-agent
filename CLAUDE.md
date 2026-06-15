@@ -101,6 +101,7 @@ scirag model                                    # list backends; pass a key to s
 scirag effort high                              # set reasoning effort (low/medium/high)
 scirag rag                                      # tune retrieval params (final_k, top_k, …) — picker
 scirag show <pmid|doi>                           # print a stored record's text
+scirag export [path]                            # export indexed papers' metadata to CSV
 scirag env set NCBI_API_KEY <key>               # manage API keys in ~/.scirag-agent/.env
 uv run python -m scirag.mcp_server.server       # MCP server (needs --extra mcp)
 ```

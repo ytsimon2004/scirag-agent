@@ -117,6 +117,56 @@ def get_indexed_articles() -> list[dict]:
         return []
 
 
+def get_indexed_articles_full() -> list[dict]:
+    """Like get_indexed_articles() but with the full citation metadata kept per
+    record — for exporting a project's bibliography (CSV). One row per unique paper.
+
+    Returns dicts with: pmid (PMID or bioRxiv DOI — the primary key), origin,
+    year, first_author, authors, title, journal, doi, url, mesh, text_source.
+    Missing fields (older records, PDF imports without resolved metadata) are "".
+    """
+    import lancedb
+
+    from scirag.projects import get_active_db_uri
+
+    cols = (
+        "pmid",
+        "title",
+        "year",
+        "first_author",
+        "authors",
+        "journal",
+        "doi",
+        "url",
+        "mesh",
+        "text_source",
+    )
+    try:
+        db = lancedb.connect(get_active_db_uri())
+        tbl = db.open_table(pipeline_cfg()["index"]["table"])
+        arrow_tbl = tbl.to_lance().to_table(columns=["metadata"])
+        metadata_col = arrow_tbl.column("metadata").combine_chunks()
+        fields = {f.name for f in metadata_col.type}
+
+        def _col(name: str) -> list:
+            if name in fields:
+                return metadata_col.field(name).to_pylist()
+            return [""] * len(metadata_col)
+
+        data = {c: _col(c) for c in cols}
+        seen: set[str] = set()
+        rows: list[dict] = []
+        for i, pmid in enumerate(data["pmid"]):
+            if pmid and pmid not in seen:
+                seen.add(pmid)
+                row = {c: (data[c][i] or "") for c in cols}
+                row["origin"] = origin_of(pmid)
+                rows.append(row)
+        return rows
+    except Exception:
+        return []
+
+
 def get_article_chunks(pmid: str) -> dict | None:
     """Return the stored chunks + metadata for a single PMID, or None if absent.
 
