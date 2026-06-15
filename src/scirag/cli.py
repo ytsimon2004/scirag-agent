@@ -1297,18 +1297,34 @@ def do_remove(pmids: list[str]) -> None:
         _qpc.INDICATOR_UNSELECTED = " "
 
         sorted_articles = sorted(articles, key=lambda x: x["year"], reverse=True)
+
+        import shutil
+        import textwrap
+
+        # leave room for the checkbox indicator + indent; wrap so long titles
+        # aren't hard-truncated by the terminal (questionary doesn't soft-wrap).
+        wrap_width = max(40, shutil.get_terminal_size((100, 24)).columns - 8)
+
+        def _choice_title(a: dict) -> list:
+            title_lines = textwrap.wrap(a["title"], width=wrap_width) or [""]
+            parts = [
+                ("fg:ansicyan bold", a["pmid"]),
+                ("", f"  {title_lines[0]}  "),
+                ("fg:ansibrightblack", f"({a['year']})"),
+            ]
+            for line in title_lines[1:]:
+                parts += [("", f"\n     {line}")]
+            author = a.get("first_author", "")
+            if author:
+                parts += [("", "\n     "), ("fg:#6c6c6c", f"{author} et al.")]
+            parts += [
+                ("", "\n     "),
+                ("fg:ansiblue", f"https://pubmed.ncbi.nlm.nih.gov/{a['pmid']}/"),
+            ]
+            return parts
+
         choices = [
-            questionary.Choice(
-                title=[
-                    ("fg:ansicyan bold", a["pmid"]),
-                    ("", f"  {a['title']}  "),
-                    ("fg:ansibrightblack", f"({a['year']})"),
-                    ("", "\n     "),
-                    ("fg:ansiblue", f"https://pubmed.ncbi.nlm.nih.gov/{a['pmid']}/"),
-                ],
-                value=a["pmid"],
-            )
-            for a in sorted_articles
+            questionary.Choice(title=_choice_title(a), value=a["pmid"]) for a in sorted_articles
         ]
         selected = _patch_escape(
             questionary.checkbox("Select articles to remove:", choices=choices)
@@ -1318,9 +1334,12 @@ def do_remove(pmids: list[str]) -> None:
             return
         pmids = selected
 
-    titles = {a["pmid"]: a["title"] for a in articles}
+    by_pmid = {a["pmid"]: a for a in articles}
     for p in pmids:
-        console.print(f"  [dim]removing[/] [cyan]{p}[/]  {titles.get(p, '')[:60]}")
+        a = by_pmid.get(p, {})
+        author = a.get("first_author", "")
+        prefix = f"{author} et al. — " if author else ""
+        console.print(f"  [dim]removing[/] [cyan]{p}[/]  {prefix}{a.get('title', '')[:60]}")
 
     remove_articles(pmids)
     console.print(f"[green]Removed {len(pmids)} article(s) from the index.[/]")
