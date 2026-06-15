@@ -290,6 +290,28 @@ Unresolved PDFs are *not* imported — scirag prints a PubMed lookup URL; find t
 PMID, rename the file to `<PMID>.pdf`, and re-import. Path arguments tab-complete,
 and `→` descends into a directory.
 
+### Import from Mendeley
+
+Pull papers straight from your local **Mendeley Reference Manager** library —
+fully offline, no OAuth:
+
+```
+scirag[rsc] ❯ /import-mendeley "place cells"            # search title/authors/abstract
+scirag[rsc] ❯ /import-mendeley "grid cells" --retmax 40
+```
+
+scirag reads Mendeley's local database (and the PDF text it already extracted),
+shows the matches in a checkbox list to select, and indexes them — isolating each
+paper's Results section just like `/index`, and falling back to the whole body
+(references stripped) when Mendeley's text has no clean Results heading, so you get
+the paper's content rather than just the abstract. Imports are keyed by **PMID** (else a
+bioRxiv DOI, else a `mendeley-<id>` fallback), so a paper you also fetched via
+`/index`/`/bindex` is recognised as already indexed instead of duplicated. The
+install location is auto-detected per OS (macOS/Windows/Linux); for a non-default
+or portable install, set `sources.mendeley.db_path` (and optionally
+`userfiles_path`) in `pipeline.yaml`, or `/env set MENDELEY_DB_PATH <path-to-.db>`
+(the env var wins).
+
 ### Web UI
 
 ```
@@ -320,6 +342,7 @@ the shell, ask in the browser, or mix freely.
 | `/effort [low\|medium\|high]` | Set LLM reasoning effort (speed vs. accuracy) |
 | `/rag [<param> <value>]` | Tune retrieval params (final_k, top_k, rerank, …); no args = picker |
 | `/import <path>` | Import a PDF file or directory of PDFs, resolved to PubMed |
+| `/import-mendeley <query> [--retmax N]` | Search the local Mendeley library, select, and index papers |
 | `/env [set\|unset <KEY> <val>]` | Manage API keys in `~/.scirag-agent/.env` |
 | `/status` | Index listing + statistics |
 | `/remove [pmid …]` | Remove article(s) from the index |
@@ -358,6 +381,7 @@ configs/
 | bioRxiv JATS XML (Results section) | bioRxiv preprints | `--full-text` with `/bindex` |
 | Review whole-body | PubMed review articles | resolved as a PubMed `Review` |
 | Manual PDF import | anything resolvable to a PMID/DOI | `/import <path>` |
+| Mendeley library (Results section, else whole body) | papers in your Mendeley Reference Manager | `/import-mendeley <query>` |
 | Free-form text | notes, book chapters, any text | `/text` |
 
 For papers with no retrievable full text, scirag falls back to the abstract; for

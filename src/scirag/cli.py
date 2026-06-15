@@ -93,6 +93,7 @@ def _source_tag(src: str) -> str:
     """Rich markup for a chunk's text_source: results / review / abstract / text."""
     return {
         "results": "[green]results[/]",
+        "fulltext": "[green]full text[/]",
         "review": "[cyan]review[/]",
         "abstract": "[dim]abstract[/]",
         "text": "[cyan]text[/]",
@@ -104,6 +105,7 @@ def _origin_tag(origin: str) -> str:
     return {
         "pubmed": "[blue]PubMed[/]",
         "biorxiv": "[magenta]bioRxiv[/]",
+        "mendeley": "[yellow]Mendeley[/]",
         "text": "[cyan]text[/]",
     }.get(origin, "[dim]—[/]")
 
@@ -809,6 +811,99 @@ def do_import(path: str) -> None:
         console.print(f"[red]No such file or directory:[/] {path}")
 
 
+def do_import_mendeley(query: str, retmax: int = 25) -> None:
+    """Search the local Mendeley library, select, and index papers (offline)."""
+    import questionary
+
+    from scirag.ingest.index import build_index, get_indexed_pmids
+    from scirag.sources import mendeley
+
+    if mendeley.db_path() is None:
+        console.print(
+            "[yellow]Mendeley library not found.[/] Looked for the Mendeley Reference "
+            "Manager database.\n"
+            "  Set its location with [cyan]/env set MENDELEY_DB_PATH <path-to-.db>[/]."
+        )
+        return
+
+    arts = mendeley.search_and_fetch(query, retmax=retmax)
+    if not arts:
+        console.print("[yellow]No matching papers in your Mendeley library.[/]")
+        return
+
+    existing = get_indexed_pmids()
+
+    def _choice_title(a) -> list:
+        parts = []
+        if a.pmid in existing:
+            parts += [("fg:ansiyellow", "[indexed] ")]
+        parts += [
+            ("fg:ansicyan bold", a.pmid),
+            ("", f"  {a.title}  "),
+            ("fg:ansibrightblack", f"({a.year})"),
+        ]
+        tags = []
+        if a.full_text:
+            tags.append(("fg:ansigreen", "full-text✓"))
+        if a.doi:
+            tags.append(("fg:ansigreen", "DOI✓"))
+        for i, (style, tag) in enumerate(tags):
+            parts += [("", "  [" if i == 0 else ", "), (style, tag)]
+        if tags:
+            parts += [("", "]")]
+        authors = _authors_short(a.authors)
+        if authors:
+            parts += [("", "\n     "), ("fg:#6c6c6c", authors)]
+        if a.url:
+            parts += [("", "\n     "), ("fg:ansiblue", a.url)]
+        return parts
+
+    choices = [
+        questionary.Choice(title=_choice_title(a), value=a, checked=(a.pmid not in existing))
+        for a in arts
+    ]
+
+    import questionary.prompts.common as _qpc
+
+    _qpc.INDICATOR_SELECTED = "✔"
+    _qpc.INDICATOR_UNSELECTED = " "
+
+    selected = _patch_escape(
+        questionary.checkbox(
+            "Select papers to index  (space = toggle, a = all, i = invert, enter = confirm):",
+            choices=choices,
+        )
+    ).ask()
+
+    if not selected:
+        console.print("[yellow]Nothing selected.[/]")
+        return
+
+    console.print()
+
+    new_arts = [a for a in selected if a.pmid not in existing]
+    already = len(selected) - len(new_arts)
+    if already:
+        console.print(f"[dim]Skipping {already} already-indexed paper(s).[/]")
+
+    # A library can hold the same paper as duplicate records sharing one key — keep
+    # the richest copy (the one with full text) so we don't double-index it.
+    deduped: dict[str, object] = {}
+    for a in new_arts:
+        keep = deduped.get(a.pmid)
+        if keep is None or (not keep.full_text and a.full_text):
+            deduped[a.pmid] = a
+    new_arts = list(deduped.values())
+
+    if not new_arts:
+        console.print("[green]Nothing new to index.[/]")
+        return
+
+    console.print(f"Embedding + indexing [cyan]{len(new_arts)}[/] paper(s)...")
+    build_index(new_arts)
+    console.print("[green]Indexed.[/]")
+
+
 def do_text_index() -> None:
     """Interactively collect metadata + free text, then embed directly into the index."""
     import click
@@ -892,6 +987,7 @@ _ENV_KEYS = {
     "NCBI_EMAIL": "Email sent with NCBI requests (politeness header)",
     "ANTHROPIC_API_KEY": "Required for claude-sonnet / claude-opus backends",
     "OPENAI_API_KEY": "Required for gpt backend",
+    "MENDELEY_DB_PATH": "Path to the Mendeley Reference Manager SQLite DB (non-default installs)",
 }
 
 _HOME_ENV = Path.home() / ".scirag-agent" / ".env"
@@ -1123,7 +1219,7 @@ def do_status() -> None:
         table.add_row(id_cell, origin_cell, a["year"], author, source_cell, a["title"])
     console.print(table)
 
-    n_full = sum(1 for a in articles if a.get("text_source") in ("results", "review"))
+    n_full = sum(1 for a in articles if a.get("text_source") in ("results", "fulltext", "review"))
     console.print(f"\n[dim]{n_full} with full text, {len(articles) - n_full} abstract-only.[/]")
 
 
@@ -1289,6 +1385,15 @@ def import_pdf(path: str):
 def import_dir(path: str):
     """Index all PDFs in a directory (Results section only)."""
     do_import_dir(path)
+
+
+@app.command(name="import-mendeley")
+def import_mendeley(
+    query: str,
+    retmax: int = typer.Option(25, help=_RETMAX_HELP),
+):
+    """Search the local Mendeley library, select, and index papers (offline)."""
+    do_import_mendeley(query, retmax)
 
 
 @app.command(name="text-index")

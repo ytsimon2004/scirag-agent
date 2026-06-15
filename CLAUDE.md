@@ -72,6 +72,12 @@ the `claude`/`codex` CLIs) — sit behind one LiteLLM router, selectable per age
   same `Article` with the preprint DOI in the `pmid` slot and `source="biorxiv"`.
 - `src/scirag/sources/pdf.py` — PDF ingestion: resolve a PDF to its source record +
   isolate the Results section.
+- `src/scirag/sources/mendeley.py` — import from the local Mendeley Reference Manager
+  library (offline): reads its SQLite store + already-extracted PDF text, reusing
+  `pdf.extract_results_section`. Keys by PMID (else bioRxiv DOI, else `mendeley-<id>`)
+  so imports dedup against PubMed/bioRxiv. Auto-detects the per-OS install
+  (macOS/Windows/Linux); override the DB/PDF location via `sources.mendeley.db_path` /
+  `userfiles_path` in `pipeline.yaml` (or the `MENDELEY_DB_PATH` env var, which wins).
 - `src/scirag/ingest/index.py` — LlamaIndex -> LanceDB (embedded, at `data/lancedb`).
 - `src/scirag/retrieval/retriever.py` — hybrid dense + BM25 with RRF fusion.
 - `src/scirag/shell.py` — interactive REPL, launched by `scirag` with no arguments.
@@ -88,6 +94,7 @@ scirag retrieve "place cells remapping"         # show retrieved chunks, no LLM
 scirag llm "How do place cells remap across environments?"   # grounded, cited answer
 scirag llm-ui                                   # Chainlit web UI (needs --extra ui)
 scirag import path/to/paper.pdf                 # index a PDF (or a dir of PDFs)
+scirag import-mendeley "place cells"            # search local Mendeley library, select, index
 scirag model                                    # list backends; pass a key to switch
 scirag effort high                              # set reasoning effort (low/medium/high)
 scirag rag                                      # tune retrieval params (final_k, top_k, …) — picker

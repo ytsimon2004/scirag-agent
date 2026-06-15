@@ -38,6 +38,7 @@ _COMMANDS: list[tuple[str, str, str]] = [
     ("/effort", "[low|medium|high]", "set LLM reasoning effort (speed vs. accuracy)"),
     ("/rag", "[<param> <value>]", "tune retrieval params (final_k, top_k, …); no args = picker"),
     ("/import", "<path>", "index a PDF file, or every PDF in a directory"),
+    ("/import-mendeley", "<query> [--retmax N]", "search + select + index Mendeley library papers"),
     ("/text", "", "index free-form text (prompts for title, identifier, origin, year, author)"),
     ("/env", "[set <KEY> <val> | unset <KEY>]", "manage API keys in ~/.scirag-agent/.env"),
     ("/status", "", "show index statistics"),
@@ -518,6 +519,14 @@ def _dispatch(line: str, session: PromptSession) -> None:
         from scirag.cli import do_import
 
         do_import(query)
+
+    elif cmd == "/import-mendeley":
+        if not query:
+            console.print("[yellow]Usage:[/] /import-mendeley <query> [--retmax N]")
+            return
+        from scirag.cli import do_import_mendeley
+
+        do_import_mendeley(query, retmax=int(flags.get("retmax", 25)))
 
     elif cmd == "/import-pdf":
         if not query:

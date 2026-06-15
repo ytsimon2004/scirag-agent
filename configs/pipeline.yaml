@@ -43,3 +43,10 @@ sources:
     default_retmax: 10
     default_days_back: 360   # keyword search scans this many days back (no keyword API endpoint)
     # bioRxiv API needs no key; client sleeps 0.5s between interval pages
+  mendeley:
+    # Local Mendeley Reference Manager import (/import-mendeley). Leave blank to
+    # auto-detect the per-OS install location. These ARE read by the code
+    # (sources/mendeley.py), unlike the retmax defaults above.
+    db_path: ""          # SQLite library file; set for a non-default/portable install.
+                         #   The MENDELEY_DB_PATH env var, if set, overrides this.
+    userfiles_path: ""   # PDF attachments dir; auto-derived next to db_path when blank.
