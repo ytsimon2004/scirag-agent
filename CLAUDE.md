@@ -11,9 +11,11 @@ the `claude`/`codex` CLIs) — sit behind one LiteLLM router, selectable per age
 
 ## Environment & setup
 - **uv** manages everything. Python 3.11.
-- `uv sync` — install. `uv sync --extra mcp --extra eval --extra ui --extra rerank`
-  for extras (or `--extra all`). `rerank` pulls sentence-transformers + torch for
-  cross-encoder reranking; without it, retrieval falls back to RRF order.
+- `uv sync` — install. `--extra all` bundles the light extras (mcp, eval, ui).
+  `rerank` is **separate** (`uv sync --extra all --extra rerank`) because it pulls
+  sentence-transformers + torch — torch is pinned CPU-only in `[tool.uv.sources]`
+  (the reranker just re-scores candidates; all inference is via Ollama), keeping it
+  ~1 GB not the ~6 GB CUDA stack. Without `rerank`, retrieval falls back to RRF order.
 - API keys live in `~/.scirag-agent/.env` (manage with `scirag env`). Set
   `NCBI_API_KEY` (raises PubMed rate limit to 10 req/s) and
   `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` only if a frontier backend is selected.
