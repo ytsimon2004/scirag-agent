@@ -13,6 +13,7 @@ from prompt_toolkit.completion import Completer, Completion, PathCompleter
 from prompt_toolkit.document import Document
 from prompt_toolkit.formatted_text import HTML, FormattedText
 from prompt_toolkit.history import FileHistory
+from prompt_toolkit.lexers import Lexer
 from rich.console import Console
 from rich.table import Table
 
@@ -163,6 +164,49 @@ class _ShellCompleter(Completer):
 
 
 _COMPLETER = _ShellCompleter()
+
+# Command tokens known to the shell — a leading "/foo" is highlighted green when it's
+# one of these, red otherwise (so a typo is visible before you hit enter).
+_COMMAND_NAMES = frozenset(c for c, _, _ in _COMMANDS)
+
+
+class _ShellLexer(Lexer):
+    """Live input highlighting for the prompt: the leading ``/command`` token in one
+    color (green if it's a real command, red if not) and any ``--flag`` in another."""
+
+    def lex_document(self, document):
+        lines = document.lines
+
+        def get_line(lineno: int):
+            text = lines[lineno]
+            fragments: list[tuple[str, str]] = []
+            command_seen = False
+            # Split into runs of non-space / space so whitespace is preserved verbatim.
+            for match in re.finditer(r"\S+|\s+", text):
+                tok = match.group()
+                if tok.isspace():
+                    fragments.append(("", tok))
+                    continue
+                if not command_seen:
+                    command_seen = True
+                    if tok.startswith("/"):
+                        style = (
+                            "fg:#4895e8"  # Claude Code's slash-command lavender
+                            if tok in _COMMAND_NAMES
+                            else "fg:ansired"
+                        )
+                        fragments.append((style, tok))
+                        continue
+                if tok.startswith("--"):
+                    fragments.append(("fg:ansiyellow", tok))
+                else:
+                    fragments.append(("", tok))
+            return fragments
+
+        return get_line
+
+
+_LEXER = _ShellLexer()
 
 
 def _prompt() -> HTML:
@@ -663,6 +707,7 @@ def run_shell() -> None:
     session: PromptSession = PromptSession(
         history=FileHistory(str(Path.home() / ".scirag_history")),
         completer=_COMPLETER,
+        lexer=_LEXER,
         key_bindings=_build_key_bindings(),
     )
 
