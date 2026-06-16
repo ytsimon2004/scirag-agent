@@ -33,8 +33,7 @@ _COMMANDS: list[tuple[str, str, str]] = [
     ),
     ("/retrieve", "<query>", "query local index (no LLM)"),
     ("/show", "<pmid>", "print a paper's stored abstract/results text"),
-    ("/llm", "[<question>] [--reset]", "RAG answer; bare /llm = sticky conversation mode"),
-    ("/llm-ui", "[--port N]", "open Chainlit web UI in browser (click-to-expand sources)"),
+    ("/ui", "[--port N]", "open Chainlit web UI in browser (click-to-expand sources)"),
     ("/model", "[backend-key]", "list or switch LLM backend"),
     ("/effort", "[low|medium|high]", "set LLM reasoning effort (speed vs. accuracy)"),
     ("/rag", "[<param> <value>]", "tune retrieval params (final_k, top_k, …); no args = picker"),
@@ -51,7 +50,7 @@ _COMMANDS: list[tuple[str, str, str]] = [
     ("/project", "[name|--default]", "list projects or switch to one"),
     ("/delete-project", "<name> [--force]", "delete a project and its index"),
     ("/help", "", "show this help"),
-    ("/clear", "", "clear the screen"),
+    ("/clear", "", "clear the conversation context"),
     ("/exit", "", "exit scirag"),
 ]
 
@@ -165,14 +164,27 @@ class _ShellCompleter(Completer):
 
 _COMPLETER = _ShellCompleter()
 
-# Command tokens known to the shell — a leading "/foo" is highlighted green when it's
-# one of these, red otherwise (so a typo is visible before you hit enter).
+# Command tokens known to the shell — a leading "/foo" is highlighted in the accent
+# color when it's one of these, red otherwise (so a typo is visible before you hit enter).
 _COMMAND_NAMES = frozenset(c for c, _, _ in _COMMANDS)
+
+# The valid --flags for each command, mined from its args hint (hyphenated form, e.g.
+# {"--retmax", "--full-text"}). Used to highlight + validate only real flags.
+_COMMAND_FLAGS: dict[str, frozenset[str]] = {
+    cmd: frozenset(re.findall(r"--[\w-]+", args)) for cmd, args, _ in _COMMANDS
+}
+_COMMAND_FLAGS["/llm-ui"] = _COMMAND_FLAGS["/ui"]  # back-compat alias
+
+
+def _norm_flag(flag: str) -> str:
+    """Normalise a --flag so `--full_text` and `--full-text` compare equal."""
+    return flag.replace("_", "-")
 
 
 class _ShellLexer(Lexer):
     """Live input highlighting for the prompt: the leading ``/command`` token in one
-    color (green if it's a real command, red if not) and any ``--flag`` in another."""
+    color (accent if it's a real command, red if not) and any *valid* ``--flag`` for
+    that command in yellow. Unknown flags are left uncolored — a hint they're wrong."""
 
     def lex_document(self, document):
         lines = document.lines
@@ -181,6 +193,7 @@ class _ShellLexer(Lexer):
             text = lines[lineno]
             fragments: list[tuple[str, str]] = []
             command_seen = False
+            valid_flags: frozenset[str] = frozenset()
             # Split into runs of non-space / space so whitespace is preserved verbatim.
             for match in re.finditer(r"\S+|\s+", text):
                 tok = match.group()
@@ -191,14 +204,18 @@ class _ShellLexer(Lexer):
                     command_seen = True
                     if tok.startswith("/"):
                         style = (
-                            "fg:#4895e8"  # Claude Code's slash-command lavender
+                            "fg:#4895e8"  # Claude Code's slash-command color
                             if tok in _COMMAND_NAMES
                             else "fg:ansired"
                         )
+                        valid_flags = _COMMAND_FLAGS.get(tok, frozenset())
                         fragments.append((style, tok))
                         continue
                 if tok.startswith("--"):
-                    fragments.append(("fg:ansiyellow", tok))
+                    # Color only flags this command actually accepts (ignore any =value).
+                    name = _norm_flag(tok.split("=", 1)[0])
+                    style = "fg:ansiyellow" if name in valid_flags else ""
+                    fragments.append((style, tok))
                 else:
                     fragments.append(("", tok))
             return fragments
@@ -222,64 +239,6 @@ def _prompt() -> HTML:
     return HTML("<ansigreen><b>scirag</b></ansigreen> <ansicyan>❯</ansicyan> ")
 
 
-def _chat_prompt() -> HTML:
-    from scirag.projects import get_active_project
-
-    project = get_active_project()
-    proj = (
-        f"<ansiwhite>[</ansiwhite><ansiyellow>{project}</ansiyellow><ansiwhite>]</ansiwhite>"
-        if project
-        else ""
-    )
-    return HTML(
-        f"<ansigreen><b>scirag</b></ansigreen>{proj} "
-        f"<ansimagenta><b>LLM mode</b></ansimagenta> <ansicyan>❯</ansicyan> "
-    )
-
-
-def _chat_mode(session: PromptSession) -> None:
-    """Sticky conversation window: every line typed is sent to /llm.
-
-    Conversation history is kept by do_llm across turns. Leave with /back
-    (returns to the command prompt) or /exit (quits scirag); /reset clears
-    the running conversation.
-    """
-    from scirag.cli import do_llm
-
-    console.print(
-        "[dim]LLM mode — type questions directly.  "
-        "[/][cyan]/exit[/][dim] to return to the shell · [/][cyan]/reset[/][dim] to clear history.[/]"
-    )
-    while True:
-        try:
-            line = session.prompt(_chat_prompt(), completer=None)
-        except KeyboardInterrupt:
-            console.print()
-            continue
-        except EOFError:
-            break
-
-        line = line.strip()
-        if not line:
-            continue
-        low = line.lower()
-        if low in ("/exit", "/quit", "/q", "/back", "/b"):
-            break  # leave LLM mode; /exit again at the shell quits scirag
-        if low in ("/reset", "reset"):
-            do_llm("", reset=True)
-            continue
-        if line.startswith("/"):
-            # Keep LLM mode focused: foreign commands aren't run here.
-            console.print(
-                "[yellow]Not available in LLM mode.[/]  "
-                "Type [cyan]/exit[/] to return to the shell, then run the command."
-            )
-            continue
-        do_llm(line)
-
-    console.print("[dim]Left LLM mode.[/]")
-
-
 def _banner() -> None:
     from scirag.cli import print_system_info
     from scirag.ingest.index import get_indexed_pmids
@@ -287,7 +246,7 @@ def _banner() -> None:
 
     console.print()
     print_system_info()
-    console.print("[dim]  /help for commands  ·  /exit to quit[/]")
+    console.print("[dim]  type a question to ask  ·  /help for commands  ·  /exit to quit[/]")
     console.print()
 
     try:
@@ -306,9 +265,9 @@ def _banner() -> None:
 
 def _handle_help() -> None:
     table = Table(box=None, padding=(0, 2), show_header=False)
-    table.add_column(style="bold cyan", no_wrap=True)
-    table.add_column(style="white", no_wrap=True)
-    table.add_column(style="dim")
+    table.add_column(style="bold cyan", no_wrap=True)  # command — always short
+    table.add_column(style="white", overflow="fold")  # args — wrap, don't truncate
+    table.add_column(style="dim", overflow="fold")  # description — wrap, don't truncate
     for cmd, args, desc in _COMMANDS:
         table.add_row(cmd, args, f"— {desc}")
     console.print(table)
@@ -337,7 +296,16 @@ def _parse_flags(args: list[str]) -> tuple[list[str], dict]:
     return positional, flags
 
 
-def _dispatch(line: str, session: PromptSession) -> None:
+def _dispatch(line: str) -> None:
+    # Anything not starting with "/" is a natural-language question → RAG answer.
+    # Sent verbatim (no shlex) so apostrophes/quotes in prose pass through, with
+    # conversation history kept across turns by do_llm.
+    if not line.lstrip().startswith("/"):
+        from scirag.cli import do_llm
+
+        do_llm(line)
+        return
+
     try:
         parts = shlex.split(line)
     except ValueError as e:
@@ -351,6 +319,20 @@ def _dispatch(line: str, session: PromptSession) -> None:
     positional, flags = _parse_flags(args)
     query = " ".join(positional)
 
+    # Reject --flags the command doesn't accept (typo guard). Unknown commands fall
+    # through to the "unknown command" branch below instead.
+    valid_flags = _COMMAND_FLAGS.get(cmd)
+    if valid_flags is not None:
+        bad = [f"--{key}" for key in flags if _norm_flag(f"--{key}") not in valid_flags]
+        if bad:
+            console.print(f"[red]Unknown flag(s) for[/] [cyan]{cmd}[/][red]:[/] {' '.join(bad)}")
+            console.print(
+                f"[dim]Valid flags: {' '.join(sorted(valid_flags))}[/]"
+                if valid_flags
+                else f"[dim]{cmd} takes no flags.[/]"
+            )
+            return
+
     if cmd in ("/exit", "/quit"):
         raise SystemExit(0)
 
@@ -359,7 +341,9 @@ def _dispatch(line: str, session: PromptSession) -> None:
         return
 
     if cmd == "/clear":
-        console.clear()
+        from scirag.cli import do_llm
+
+        do_llm("", reset=True)  # clear conversation context (not the screen)
         return
 
     if cmd == "/env":
@@ -532,19 +516,7 @@ def _dispatch(line: str, session: PromptSession) -> None:
 
         do_show(query)
 
-    elif cmd == "/llm":
-        if flags.get("reset"):
-            from scirag.cli import do_llm
-
-            do_llm("", reset=True)
-        elif not query:
-            _chat_mode(session)  # bare /llm → sticky conversation window
-        else:
-            from scirag.cli import do_llm
-
-            do_llm(query)
-
-    elif cmd == "/llm-ui":
+    elif cmd in ("/ui", "/llm-ui"):  # /llm-ui kept as a back-compat alias
         from scirag.cli import do_llm_ui
 
         port = int(flags.get("port", 8000))
@@ -668,7 +640,9 @@ def _bottom_toolbar() -> FormattedText:
             return FormattedText([("fg:#888888", "matches:  " + "   ".join(matches[:10]))])
         return FormattedText([("fg:#888888", f"unknown command {token} — /help for the list")])
 
-    return FormattedText([("fg:#888888", "type a command — Tab to complete · /help for the list")])
+    return FormattedText(
+        [("fg:#888888", "type a question, or a /command — Tab to complete · /help for the list")]
+    )
 
 
 def _build_key_bindings():
@@ -732,7 +706,7 @@ def run_shell() -> None:
             break
 
         try:
-            _dispatch(line, session)
+            _dispatch(line)
         except SystemExit:
             console.print("[dim]Bye.[/]")
             break

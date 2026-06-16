@@ -755,7 +755,7 @@ def do_llm(query: str, *, reset: bool = False) -> None:
     console.print(Markdown(answer))
     console.print(
         f"\n[dim](effort {get_effort()} · {elapsed:.1f}s · turn {len(_llm_history) // 2} "
-        "— /llm --reset to clear)[/]"
+        "— /clear to reset)[/]"
     )
 
 
