@@ -34,12 +34,14 @@ def origin_of(identifier: str) -> str:
     """Infer a record's source from its primary key.
 
     PubMed PMIDs are purely numeric; bioRxiv DOIs (e.g. 10.1101/…, 10.64898/…)
-    contain a slash; free-text entries use a "text-" prefix; Mendeley imports
-    without a PMID or preprint DOI use a "mendeley-" prefix.
+    contain a slash; free-text entries use a "text-" prefix; Mendeley/Zotero
+    imports without a PMID or preprint DOI use a "mendeley-"/"zotero-" prefix.
     """
     ident = identifier or ""
     if ident.startswith("mendeley-"):
         return "mendeley"
+    if ident.startswith("zotero-"):
+        return "zotero"
     if "/" in ident:
         return "biorxiv"
     if ident.startswith("text-"):

@@ -87,6 +87,15 @@ the `claude`/`codex` CLIs) — sit behind one LiteLLM router, selectable per age
   so imports dedup against PubMed/bioRxiv. Auto-detects the per-OS install
   (macOS/Windows/Linux); override the DB/PDF location via `sources.mendeley.db_path` /
   `userfiles_path` in `pipeline.yaml` (or the `MENDELEY_DB_PATH` env var, which wins).
+- `src/scirag/sources/zotero.py` — import from the local Zotero library (offline),
+  mirroring the Mendeley source. Reads `zotero.sqlite` (a normalised relational
+  schema, not Mendeley's FTS tables) + Zotero's own full-text cache
+  (`storage/<key>/.zotero-ft-cache`, else the attached PDF), reusing
+  `pdf.extract_results_section`. Mines the PMID from the CSL `extra` field. Keys by
+  PMID (else bioRxiv DOI, else `zotero-<id>`) so imports dedup against
+  PubMed/bioRxiv/Mendeley. Defaults to `~/Zotero`; override the DB/storage location
+  via `sources.zotero.db_path` / `storage_path` in `pipeline.yaml` (or the
+  `ZOTERO_DB_PATH` env var, which wins).
 - `src/scirag/ingest/index.py` — LlamaIndex -> LanceDB (embedded, at `data/lancedb`).
 - `src/scirag/retrieval/retriever.py` — hybrid dense + BM25 with RRF fusion.
 - `src/scirag/shell.py` — interactive REPL, launched by `scirag` with no arguments.
@@ -106,6 +115,7 @@ scirag llm "How do place cells remap across environments?"   # grounded, cited a
 scirag llm-ui                                   # Chainlit web UI (needs --extra ui)
 scirag import path/to/paper.pdf                 # index a PDF (or a dir of PDFs)
 scirag import-mendeley "place cells"            # search local Mendeley library, select, index
+scirag import-zotero "place cells"              # search local Zotero library, select, index
 scirag model                                    # list backends; pass a key to switch
 scirag effort high                              # set reasoning effort (low/medium/high)
 scirag rag                                      # tune retrieval params (final_k, top_k, …) — picker

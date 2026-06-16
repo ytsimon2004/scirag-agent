@@ -106,6 +106,7 @@ def _origin_tag(origin: str) -> str:
         "pubmed": "[blue]PubMed[/]",
         "biorxiv": "[magenta]bioRxiv[/]",
         "mendeley": "[yellow]Mendeley[/]",
+        "zotero": "[red]Zotero[/]",
         "text": "[cyan]text[/]",
     }.get(origin, "[dim]—[/]")
 
@@ -820,9 +821,6 @@ def do_import(path: str) -> None:
 
 def do_import_mendeley(query: str, retmax: int = 25) -> None:
     """Search the local Mendeley library, select, and index papers (offline)."""
-    import questionary
-
-    from scirag.ingest.index import build_index, get_indexed_pmids
     from scirag.sources import mendeley
 
     if mendeley.db_path() is None:
@@ -834,8 +832,37 @@ def do_import_mendeley(query: str, retmax: int = 25) -> None:
         return
 
     arts = mendeley.search_and_fetch(query, retmax=retmax)
+    _select_and_index(arts, "Mendeley")
+
+
+def do_import_zotero(query: str, retmax: int = 25) -> None:
+    """Search the local Zotero library, select, and index papers (offline)."""
+    from scirag.sources import zotero
+
+    if zotero.db_path() is None:
+        console.print(
+            "[yellow]Zotero library not found.[/] Looked for the Zotero database "
+            "(zotero.sqlite).\n"
+            "  Set its location with [cyan]/env set ZOTERO_DB_PATH <path-to-zotero.sqlite>[/]."
+        )
+        return
+
+    arts = zotero.search_and_fetch(query, retmax=retmax)
+    _select_and_index(arts, "Zotero")
+
+
+def _select_and_index(arts: list, library: str) -> None:
+    """Interactively select papers from a reference library and index the new ones.
+
+    Shared by the offline /import-mendeley and /import-zotero flows; `library` is
+    only used in the "nothing matched" message.
+    """
+    import questionary
+
+    from scirag.ingest.index import build_index, get_indexed_pmids
+
     if not arts:
-        console.print("[yellow]No matching papers in your Mendeley library.[/]")
+        console.print(f"[yellow]No matching papers in your {library} library.[/]")
         return
 
     existing = get_indexed_pmids()
@@ -995,6 +1022,7 @@ _ENV_KEYS = {
     "ANTHROPIC_API_KEY": "Required for claude-sonnet / claude-opus backends",
     "OPENAI_API_KEY": "Required for gpt backend",
     "MENDELEY_DB_PATH": "Path to the Mendeley Reference Manager SQLite DB (non-default installs)",
+    "ZOTERO_DB_PATH": "Path to the Zotero SQLite DB (zotero.sqlite; non-default installs)",
 }
 
 _HOME_ENV = Path.home() / ".scirag-agent" / ".env"
@@ -1480,6 +1508,15 @@ def import_mendeley(
 ):
     """Search the local Mendeley library, select, and index papers (offline)."""
     do_import_mendeley(query, retmax)
+
+
+@app.command(name="import-zotero")
+def import_zotero(
+    query: str,
+    retmax: int = typer.Option(25, help=_RETMAX_HELP),
+):
+    """Search the local Zotero library, select, and index papers (offline)."""
+    do_import_zotero(query, retmax)
 
 
 @app.command(name="text-index")

@@ -54,10 +54,11 @@ class Article:
     # How to label full_text in metadata: "results" (Results section) or "review"
     # (whole-body text of a review article, which has no Results section).
     full_text_kind: str = "results"
-    # Origin of the record: "pubmed", "biorxiv", "text", or "mendeley". For bioRxiv
-    # preprints the DOI is stored in the `pmid` slot (the system-wide primary key),
-    # so dedup, /show, /remove, and [id] citations work unchanged. Mendeley imports
-    # keyed without a PMID/preprint-DOI use a "mendeley-<id>" pmid slot.
+    # Origin of the record: "pubmed", "biorxiv", "text", "mendeley", or "zotero".
+    # For bioRxiv preprints the DOI is stored in the `pmid` slot (the system-wide
+    # primary key), so dedup, /show, /remove, and [id] citations work unchanged.
+    # Mendeley/Zotero imports keyed without a PMID/preprint-DOI use a
+    # "mendeley-<id>"/"zotero-<id>" pmid slot.
     source: str = "pubmed"
 
     @property
@@ -66,7 +67,7 @@ class Article:
             return f"https://www.biorxiv.org/content/{self.doi}"
         if self.source == "text":
             return ""
-        if self.source == "mendeley":
+        if self.source in ("mendeley", "zotero"):
             return f"https://doi.org/{self.doi}" if self.doi else ""
         return f"https://pubmed.ncbi.nlm.nih.gov/{self.pmid}/"
 

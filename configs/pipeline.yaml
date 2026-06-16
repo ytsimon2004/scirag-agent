@@ -50,3 +50,9 @@ sources:
     db_path: ""          # SQLite library file; set for a non-default/portable install.
                          #   The MENDELEY_DB_PATH env var, if set, overrides this.
     userfiles_path: ""   # PDF attachments dir; auto-derived next to db_path when blank.
+  zotero:
+    # Local Zotero import (/import-zotero). Leave blank to use the default data
+    # directory (~/Zotero). These ARE read by the code (sources/zotero.py).
+    db_path: ""          # zotero.sqlite; set for a non-default/portable install.
+                         #   The ZOTERO_DB_PATH env var, if set, overrides this.
+    storage_path: ""     # Attachments dir (storage/); auto-derived next to db_path when blank.
