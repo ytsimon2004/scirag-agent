@@ -473,7 +473,7 @@ def test_enrich_warns_when_no_full_text(mock_pmcids, mock_unp):
         warnings.simplefilter("always")
         enrich_with_fulltext([article])
     assert any("no retrievable full text" in str(w.message) for w in caught)
-    assert any("import-pdf" in str(w.message) for w in caught)
+    assert any("scirag import" in str(w.message) for w in caught)
 
 
 def test_enrich_with_fulltext_empty_list():

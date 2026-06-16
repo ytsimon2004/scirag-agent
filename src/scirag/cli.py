@@ -1,12 +1,10 @@
 """scirag CLI — subcommands for scripting, or just `scirag` for the interactive shell.
 
 scirag                                        # interactive shell (default)
-scirag search "grid cells entorhinal"         # raw PubMed, no LLM
 scirag index  "hippocampal place cells" --retmax 30 --full-text
 scirag retrieve "place cells remapping"
 scirag ask    "How do place cells remap across environments?"
-scirag import-pdf paper.pdf
-scirag import-dir ./papers/
+scirag import paper.pdf                        # a PDF file, or a directory of PDFs
 """
 
 from __future__ import annotations
@@ -662,7 +660,7 @@ _llm_history: list[dict[str, str]] = []
 
 def _source_summary(nodes) -> str:
     """One-line summary of the sources grounding the answer, as author-year
-    citations. Full sources with snippets and links are in the web UI (/llm-ui)."""
+    citations. Full sources with snippets and links are in the web UI (/ui)."""
     from scirag.cite import citation
 
     cites: list[str] = []
@@ -720,7 +718,7 @@ def _answer_with_spinner(messages: list[dict[str, str]], *, max_tokens: int | No
 def do_llm(query: str, *, reset: bool = False) -> None:
     """RAG-grounded answer with a one-line source summary and conversation memory.
 
-    Full source passages (with snippets and links) live in the web UI (/llm-ui)."""
+    Full source passages (with snippets and links) live in the web UI (/ui)."""
     import time
 
     from rich.rule import Rule
@@ -1469,7 +1467,7 @@ def show(pmid: str):
 
 
 @app.command()
-def llm(
+def ask(
     query: str = typer.Argument("", help="Question to ask. Omit with --reset to clear history."),
     reset: bool = typer.Option(False, "--reset", help="Clear conversation history."),
 ):
@@ -1477,8 +1475,8 @@ def llm(
     do_llm(query, reset=reset)
 
 
-@app.command(name="llm-ui")
-def llm_ui(port: int = typer.Option(8000, "--port", "-p", help="Port to listen on.")):
+@app.command()
+def ui(port: int = typer.Option(8000, "--port", "-p", help="Port to listen on.")):
     """Launch the Chainlit web UI for RAG chat."""
     do_llm_ui(port)
 
@@ -1487,18 +1485,6 @@ def llm_ui(port: int = typer.Option(8000, "--port", "-p", help="Port to listen o
 def import_(path: str):
     """Index a PDF file or every PDF in a directory (auto-detected)."""
     do_import(path)
-
-
-@app.command(name="import-pdf")
-def import_pdf(path: str):
-    """Index a single manually downloaded PDF (Results section only)."""
-    do_import_pdf(path)
-
-
-@app.command(name="import-dir")
-def import_dir(path: str):
-    """Index all PDFs in a directory (Results section only)."""
-    do_import_dir(path)
 
 
 @app.command(name="import-mendeley")
@@ -1519,8 +1505,8 @@ def import_zotero(
     do_import_zotero(query, retmax)
 
 
-@app.command(name="text-index")
-def text_index():
+@app.command(name="import-text")
+def import_text():
     """Index free-form text entered interactively (prompts for title, identifier, etc.)."""
     do_text_index()
 

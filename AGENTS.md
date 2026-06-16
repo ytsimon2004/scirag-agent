@@ -75,7 +75,7 @@ the `claude`/`codex` CLIs) — sit behind one LiteLLM router, selectable per age
 - `src/scirag/ingest/index.py` — LlamaIndex -> LanceDB (embedded, at `data/lancedb`).
 - `src/scirag/retrieval/retriever.py` — hybrid dense + BM25 with RRF fusion.
 - `src/scirag/shell.py` — interactive REPL, launched by `scirag` with no arguments.
-- `src/scirag/ui.py` — Chainlit web UI (`scirag llm-ui`, needs `--extra ui`).
+- `src/scirag/ui.py` — Chainlit web UI (`scirag ui`, needs `--extra ui`).
 - `src/scirag/mcp_server/server.py` — exposes retrieval as MCP tools (optional extra).
 - `src/scirag/cli.py` — Typer CLI entry point (`scirag = scirag.cli:app`).
 
@@ -85,8 +85,8 @@ scirag                                          # interactive shell (no args)
 scirag index --retmax 30                        # interactively fetch/select/index PubMed
 scirag bindex --days-back 180 --full-text       # interactively index bioRxiv preprints
 scirag retrieve "place cells remapping"         # show retrieved chunks, no LLM
-scirag llm "How do place cells remap across environments?"   # grounded, cited answer
-scirag llm-ui                                   # Chainlit web UI (needs --extra ui)
+scirag ask "How do place cells remap across environments?"   # grounded, cited answer
+scirag ui                                       # Chainlit web UI (needs --extra ui)
 scirag import path/to/paper.pdf                 # index a PDF (or a dir of PDFs)
 scirag model                                    # list backends; pass a key to switch
 scirag effort high                              # set reasoning effort (low/medium/high)
@@ -105,7 +105,7 @@ uv run python -m scirag.mcp_server.server       # MCP server (needs --extra mcp)
   the others are configured ahead of the multi-agent buildout (see Roadmap).
 - Synthesis cites every claim with a human-readable **author-year** marker
   (e.g. `(Powell et al., 2020)`), built by `scirag.cite.citation()` from the
-  source metadata and used in the answer + all source listings (shell `/llm`,
+  source metadata and used in the answer + all source listings (shell answers,
   `/retrieve`, web UI). The PMID (PubMed) / DOI (`10.1101/…`, bioRxiv) still lives
   in the metadata `pmid` field and remains the system-wide **primary key** (dedup,
   `show`/`remove`, and the `[id: …]` shown in each source block for traceability) —

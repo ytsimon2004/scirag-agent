@@ -255,6 +255,6 @@ def enrich_with_fulltext(articles: list[Article]) -> None:
         warnings.warn(
             f"{len(missing)} preprint(s) have no retrievable full text "
             f"(DOIs: {dois}) — indexing on abstract. If this persists, download the "
-            "PDF and use `scirag import-pdf` to add it.",
+            "PDF and use `scirag import` to add it.",
             stacklevel=2,
         )

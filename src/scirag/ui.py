@@ -1,6 +1,6 @@
 """Chainlit web UI for scirag-agent.
 
-Launch via the shell:  scirag ❯ /llm-ui
+Launch via the shell:  scirag ❯ /ui
 Or directly:           uv run --extra ui chainlit run src/scirag/ui.py
 """
 

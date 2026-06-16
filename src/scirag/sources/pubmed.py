@@ -424,6 +424,6 @@ def enrich_with_fulltext(articles: list[Article]) -> None:
         warnings.warn(
             f"{len(missing)} article(s) have no retrievable full text "
             f"(PMIDs: {pmids_str}). "
-            "Use `scirag import-pdf` to add manually downloaded PDFs.",
+            "Use `scirag import` to add manually downloaded PDFs.",
             stacklevel=2,
         )

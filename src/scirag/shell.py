@@ -40,7 +40,11 @@ _COMMANDS: list[tuple[str, str, str]] = [
     ("/import", "<path>", "index a PDF file, or every PDF in a directory"),
     ("/import-mendeley", "<query> [--retmax N]", "search + select + index Mendeley library papers"),
     ("/import-zotero", "<query> [--retmax N]", "search + select + index Zotero library papers"),
-    ("/text", "", "index free-form text (prompts for title, identifier, origin, year, author)"),
+    (
+        "/import-text",
+        "",
+        "index free-form text (prompts for title, identifier, origin, year, author)",
+    ),
     ("/env", "[set <KEY> <val> | unset <KEY>]", "manage API keys in ~/.scirag-agent/.env"),
     ("/status", "", "show index statistics"),
     ("/export", "[path]", "export indexed papers' metadata to CSV"),
@@ -95,32 +99,20 @@ def _import_path(path: str) -> bool:
     return not _is_hidden(path) and (os.path.isdir(path) or path.lower().endswith(".pdf"))
 
 
-def _visible_dir(path: str) -> bool:
-    """Completion filter for directory-only completion: skip hidden dirs."""
-    return not _is_hidden(path)
-
-
 class _ShellCompleter(Completer):
     """Complete command names (with their args + description, like /help), the
-    flags of the command being typed, and filesystem paths for /import-*."""
+    flags of the command being typed, and filesystem paths for /import."""
 
     def __init__(self) -> None:
         self._import_paths = PathCompleter(expanduser=True, file_filter=_import_path)
-        self._dir_paths = PathCompleter(
-            expanduser=True, only_directories=True, file_filter=_visible_dir
-        )
-        # /import takes either; /import-pdf and /import-dir remain as aliases.
-        self._path_completers = {
-            "/import": self._import_paths,
-            "/import-pdf": self._import_paths,
-            "/import-dir": self._dir_paths,
-        }
+        # /import takes either a PDF file or a directory of PDFs.
+        self._path_completers = {"/import": self._import_paths}
 
     def get_completions(self, document, complete_event):
         text = document.text_before_cursor
         stripped = text.lstrip()
 
-        # Filesystem-path completion for the /import-* commands.
+        # Filesystem-path completion for the /import command.
         for cmd, completer in self._path_completers.items():
             prefix = cmd + " "
             if stripped.startswith(prefix):
@@ -173,7 +165,6 @@ _COMMAND_NAMES = frozenset(c for c, _, _ in _COMMANDS)
 _COMMAND_FLAGS: dict[str, frozenset[str]] = {
     cmd: frozenset(re.findall(r"--[\w-]+", args)) for cmd, args, _ in _COMMANDS
 }
-_COMMAND_FLAGS["/llm-ui"] = _COMMAND_FLAGS["/ui"]  # back-compat alias
 
 
 def _norm_flag(flag: str) -> str:
@@ -516,7 +507,7 @@ def _dispatch(line: str) -> None:
 
         do_show(query)
 
-    elif cmd in ("/ui", "/llm-ui"):  # /llm-ui kept as a back-compat alias
+    elif cmd == "/ui":
         from scirag.cli import do_llm_ui
 
         port = int(flags.get("port", 8000))
@@ -561,23 +552,7 @@ def _dispatch(line: str) -> None:
 
         do_import_zotero(query, retmax=int(flags.get("retmax", 25)))
 
-    elif cmd == "/import-pdf":
-        if not query:
-            console.print("[yellow]Usage:[/] /import-pdf <path>")
-            return
-        from scirag.cli import do_import_pdf
-
-        do_import_pdf(query)
-
-    elif cmd == "/import-dir":
-        if not query:
-            console.print("[yellow]Usage:[/] /import-dir <path>")
-            return
-        from scirag.cli import do_import_dir
-
-        do_import_dir(query)
-
-    elif cmd == "/text":
+    elif cmd == "/import-text":
         from scirag.cli import do_text_index
 
         do_text_index()
@@ -587,17 +562,16 @@ def _dispatch(line: str) -> None:
 
 
 def _import_dir_arg(text: str) -> str | None:
-    """If `text` is an /import-* command whose path argument is an existing
-    directory, return that expanded directory path; otherwise None."""
+    """If `text` is an /import command whose path argument is an existing directory,
+    return that expanded directory path; otherwise None."""
     stripped = text.lstrip()
-    for cmd in ("/import", "/import-pdf", "/import-dir"):
-        prefix = cmd + " "
-        if stripped.startswith(prefix):
-            arg = stripped[len(prefix) :]
-            if not arg:
-                return None
-            expanded = os.path.expanduser(arg)
-            return expanded if os.path.isdir(expanded) else None
+    prefix = "/import "
+    if stripped.startswith(prefix):
+        arg = stripped[len(prefix) :]
+        if not arg:
+            return None
+        expanded = os.path.expanduser(arg)
+        return expanded if os.path.isdir(expanded) else None
     return None
 
 
@@ -648,7 +622,7 @@ def _bottom_toolbar() -> FormattedText:
 def _build_key_bindings():
     """Shell-wide key bindings.
 
-    - Right arrow descends into a completed directory for the /import-* commands
+    - Right arrow descends into a completed directory for the /import command
       (appends the separator and reopens completion); otherwise moves the cursor.
     """
     from prompt_toolkit.key_binding import KeyBindings

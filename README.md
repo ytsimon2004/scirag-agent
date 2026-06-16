@@ -35,7 +35,7 @@ The core trade-off scirag makes: you spend a little time curating an index, and 
 - **bioRxiv preprints** — searched via Europe PMC and indexed with full JATS XML
   when available.
 - **Local PDFs** — resolved to a PubMed record by PMID, DOI, or title search.
-- **Free-form text** — paste any text directly with `/text` (prompted for title,
+- **Free-form text** — paste any text directly with `/import-text` (prompted for title,
   identifier, origin, year, author).
 
 Built with **LlamaIndex** (chunking, embeddings, LanceDB vector store, hybrid
@@ -99,7 +99,7 @@ the light ones (`ui`, `mcp`, `eval`) — `rerank` is deliberately left out of it
 
 | Extra | Enables |
 |---|---|
-| `ui` | Chainlit web UI (`/llm-ui`) |
+| `ui` | Chainlit web UI (`/ui`) |
 | `rerank` | Cross-encoder reranking (`bge-reranker-v2-m3`); then `/rag rerank on`. Pulls torch |
 | `mcp` | MCP server exposing retrieval as tools |
 | `eval` | RAG evaluation (ragas) |
@@ -163,7 +163,7 @@ Keys are stored in `~/.scirag-agent/.env` — never in the repo.
 
 ## Core workflow
 
-**index → status → show → llm.**
+**index → status → show → ask.**
 
 ### 1 — Index papers
 
@@ -190,7 +190,7 @@ checkbox flow, and fetches full JATS XML when available.
 
 **Free-form text:**
 ```
-scirag[rsc] ❯ /text
+scirag[rsc] ❯ /import-text
 ```
 
 Prompts for title, identifier, origin, year, and author(s), then opens `$EDITOR`
@@ -223,21 +223,14 @@ one PMID — the way to confirm what actually went into the index.
 
 ### 4 — Ask, grounded in your papers
 
-One-shot question (prints a one-line source summary, then a cited answer):
+Just type a question at the prompt — anything not starting with `/` is sent to
+the RAG pipeline (a one-line source summary, then a cited answer). History is
+kept across turns, so follow-ups work; `/clear` resets the conversation:
 
 ```
-scirag[rsc] ❯ /llm "What distinguishes anterior from posterior RSC?"
-```
-
-Or enter **conversation mode** — type a bare `/llm` and then ask questions
-directly, with history kept across turns:
-
-```
-scirag[rsc] ❯ /llm
-scirag[rsc] LLM mode ❯ What distinguishes anterior from posterior RSC?
-scirag[rsc] LLM mode ❯ Which cell types mediate this?     # follow-up
-scirag[rsc] LLM mode ❯ /reset                             # clear history
-scirag[rsc] LLM mode ❯ /exit                              # back to the shell
+scirag[rsc] ❯ What distinguishes anterior from posterior RSC?
+scirag[rsc] ❯ Which cell types mediate this?     # follow-up, in context
+scirag[rsc] ❯ /clear                             # reset the conversation
 ```
 
 When no indexed source is relevant enough, scirag answers from general
@@ -258,7 +251,7 @@ scirag[rsc] ❯ /effort           # show current (default: medium)
 scirag[rsc] ❯ /effort low       # fastest answers
 ```
 
-Each `/llm` answer prints its effort and elapsed time, so you can compare.
+Each answer prints its effort and elapsed time, so you can compare.
 
 **Retrieval parameters** — control which chunks reach the LLM. `/rag` opens a
 picker (with per-parameter help explaining the effect), or set one directly:
@@ -321,8 +314,8 @@ or portable install, set `sources.mendeley.db_path` (and optionally
 ### Web UI
 
 ```
-scirag[rsc] ❯ /llm-ui              # opens http://localhost:8000
-scirag[rsc] ❯ /llm-ui --port 8080  # custom port
+scirag[rsc] ❯ /ui              # opens http://localhost:8000
+scirag[rsc] ❯ /ui --port 8080  # custom port
 ```
 
 Requires `uv sync --extra ui`. Streaming chat, a **click-to-expand Sources** row
@@ -335,29 +328,33 @@ the shell, ask in the browser, or mix freely.
 
 ## All shell commands
 
+Type any text that **doesn't** start with `/` to ask a grounded question (RAG
+answer with conversation history). Commands all start with `/`:
+
 | Command | Description |
 |---|---|
-| `/index <query> [--retmax N] [--full-text] [--year-from YYYY] [--year-to YYYY]` | Fetch, select, and embed PubMed articles |
+| `/index <query> [--retmax N] [--full-text] [--semantic] [--year-from YYYY] [--year-to YYYY]` | Fetch, select, and embed PubMed articles |
 | `/bindex <query> [--retmax N] [--days-back N] [--full-text] [--year-from YYYY] [--year-to YYYY]` | Fetch, select, and embed bioRxiv preprints |
-| `/text` | Index free-form text (prompts for metadata + opens editor) |
+| `/import-text` | Index free-form text (prompts for metadata + opens editor) |
 | `/retrieve <query>` | Show retrieved chunks for a query (no LLM) |
 | `/show <pmid>` | Print a paper's stored abstract/results/review text |
-| `/llm [<question>] [--reset]` | RAG answer; bare `/llm` = conversation mode |
-| `/llm-ui [--port N]` | Open the Chainlit web UI |
+| `/ui [--port N]` | Open the Chainlit web UI |
 | `/model [backend-key]` | List or switch LLM backend |
 | `/effort [low\|medium\|high]` | Set LLM reasoning effort (speed vs. accuracy) |
 | `/rag [<param> <value>]` | Tune retrieval params (final_k, top_k, rerank, …); no args = picker |
 | `/import <path>` | Import a PDF file or directory of PDFs, resolved to PubMed |
 | `/import-mendeley <query> [--retmax N]` | Search the local Mendeley library, select, and index papers |
+| `/import-zotero <query> [--retmax N]` | Search the local Zotero library, select, and index papers |
 | `/env [set\|unset <KEY> <val>]` | Manage API keys in `~/.scirag-agent/.env` |
 | `/status` | Index listing + statistics |
+| `/export [path]` | Export indexed papers' metadata to CSV |
 | `/remove [pmid …]` | Remove article(s) from the index |
 | `/clear-db [--force]` | Delete the active index |
 | `/create-project <name> [desc]` / `/project [name\|--default]` / `/delete-project <name>` | Manage projects |
-| `/help` · `/clear` · `/exit` | Help, clear screen, quit |
+| `/help` · `/clear` · `/exit` | Help, reset conversation, quit |
 
 All commands are also available as CLI subcommands: `scirag index "…"`,
-`scirag show 32147692`, `scirag llm "…"`, etc.
+`scirag show 32147692`, `scirag ask "…"`, etc.
 
 ---
 
@@ -388,7 +385,7 @@ configs/
 | Review whole-body | PubMed review articles | resolved as a PubMed `Review` |
 | Manual PDF import | anything resolvable to a PMID/DOI | `/import <path>` |
 | Mendeley library (Results section, else whole body) | papers in your Mendeley Reference Manager | `/import-mendeley <query>` |
-| Free-form text | notes, book chapters, any text | `/text` |
+| Free-form text | notes, book chapters, any text | `/import-text` |
 
 For papers with no retrievable full text, scirag falls back to the abstract; for
 PDFs that can't be matched to PubMed at all, it skips them and prints the lookup URL.
