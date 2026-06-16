@@ -1,4 +1,7 @@
 # scirag-agent
+<p align="center">
+  <img src="docs/logo.png" alt="scirag-agent logo" width="400">
+</p>
 
 An interactive shell for building a **local, curated literature index** and asking
 grounded, cited questions against it. Sources: PubMed, bioRxiv, local PDFs, or any
