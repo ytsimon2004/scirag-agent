@@ -12,6 +12,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytest.importorskip("mcp", reason="needs the `mcp` extra (uv sync --extra mcp)")
+
 from scirag.mcp_server import server
 
 

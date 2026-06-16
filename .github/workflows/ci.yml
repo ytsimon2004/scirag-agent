@@ -18,7 +18,7 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --extra mcp   # light dep; lets tests/test_mcp.py run instead of skip
 
       - name: Lint
         run: uv run ruff check src/ tests/
