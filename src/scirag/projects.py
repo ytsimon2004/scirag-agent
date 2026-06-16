@@ -9,9 +9,21 @@ All data lives under ~/.scirag-agent/:
 
 from __future__ import annotations
 
+import contextvars
 import json
+from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
+
+# Process-local override of the active project, used to scope a single operation
+# (e.g. one MCP tool call) to a named project WITHOUT rewriting the shared
+# .active_project file. A ContextVar isolates concurrent async tasks / threads, so
+# parallel callers don't clobber each other or the interactive shell. `_UNSET`
+# distinguishes "no override" from an explicit override to the global index (None).
+_UNSET = object()
+_project_override: contextvars.ContextVar = contextvars.ContextVar(
+    "scirag_project_override", default=_UNSET
+)
 
 
 def _data_dir() -> Path:
@@ -45,11 +57,34 @@ def get_active_project() -> str | None:
 
 
 def get_active_db_uri() -> str:
-    """Return the LanceDB URI for the active project, or the global default."""
-    name = get_active_project()
+    """Return the LanceDB URI for the active project, or the global default.
+
+    A `using_project()` scope (process-local) takes precedence over the persisted
+    active project, so a single operation can target a different index without
+    side-effecting the shared state.
+    """
+    override = _project_override.get()
+    name = override if override is not _UNSET else get_active_project()
     if name:
         return str(_data_dir() / "projects" / name / "lancedb")
     return str(_data_dir() / "lancedb")
+
+
+@contextmanager
+def using_project(name: str | None):
+    """Temporarily resolve the index to `name` (None = global default) for the
+    current execution context only, leaving the persisted active project untouched.
+
+    ContextVar-based, so it's safe under concurrency: parallel async tasks / threads
+    each get their own scope and never clobber the .active_project file or each
+    other. Only affects `get_active_db_uri()` (and thus all index reads/writes that
+    route through it); the shell prompt's `get_active_project()` is unaffected.
+    """
+    token = _project_override.set(name)
+    try:
+        yield
+    finally:
+        _project_override.reset(token)
 
 
 # ---------------------------------------------------------------------------
