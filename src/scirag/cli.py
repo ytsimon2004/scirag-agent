@@ -9,6 +9,7 @@ scirag import paper.pdf                        # a PDF file, or a directory of P
 
 from __future__ import annotations
 
+import os
 import warnings
 from pathlib import Path
 
@@ -425,9 +426,15 @@ def _ask(question):
     return question.ask()
 
 
-def do_model(backend_key: str = "") -> None:
-    """List available backends or switch all LLM agents to a new backend."""
-    from scirag.config import active_backend_key, models_cfg, set_agent_backend
+def do_model(backend_key: str = "", persist: bool = False) -> None:
+    """List available backends or switch all LLM agents to a new backend.
+    persist=True saves it as the default in settings.yaml (CLI); otherwise session-only."""
+    from scirag.config import (
+        active_backend_key,
+        models_cfg,
+        set_agent_backend,
+        set_default_backend,
+    )
 
     cfg = models_cfg()
     backends = cfg["backends"]
@@ -472,15 +479,22 @@ def do_model(backend_key: str = "") -> None:
         console.print(f"[dim]Available: {', '.join(backends)}[/]")
         return
 
-    for agent in _LLM_AGENTS:
-        set_agent_backend(agent, backend_key)
     spec = backends[backend_key]
-    console.print(f"Switched to [cyan]{backend_key}[/]  [dim]({spec['model']})[/]")
+    if persist:
+        set_default_backend(backend_key)
+        console.print(
+            f"Default model set to [cyan]{backend_key}[/]  [dim]({spec['model']}) · saved[/]"
+        )
+    else:
+        for agent in _LLM_AGENTS:
+            set_agent_backend(agent, backend_key)
+        console.print(f"Switched to [cyan]{backend_key}[/]  [dim]({spec['model']})[/]")
 
 
-def do_effort(level: str = "") -> None:
-    """Show or set the session reasoning effort (low/medium/high)."""
-    from scirag.config import _VALID_EFFORT, get_effort, set_effort
+def do_effort(level: str = "", persist: bool = False) -> None:
+    """Show or set the reasoning effort (low/medium/high).
+    persist=True saves it as the default in settings.yaml (CLI); otherwise session-only."""
+    from scirag.config import _VALID_EFFORT, get_effort, set_default_effort, set_effort
 
     if not level:
         console.print(
@@ -490,12 +504,13 @@ def do_effort(level: str = "") -> None:
         return
 
     try:
-        set_effort(level.lower())
+        (set_default_effort if persist else set_effort)(level.lower())
     except ValueError:
         console.print(f"[red]Unknown effort:[/] {level!r}")
         console.print(f"[dim]Choose one of: {', '.join(_VALID_EFFORT)}[/]")
         return
-    console.print(f"Reasoning effort set to [cyan]{get_effort()}[/]")
+    suffix = "  [dim](saved as default)[/]" if persist else ""
+    console.print(f"Reasoning effort set to [cyan]{get_effort()}[/]{suffix}")
 
 
 # Live retrieval params the user can tune at runtime. chunk_size/chunk_overlap are
@@ -551,9 +566,12 @@ _RAG_PARAMS: list[tuple[str, type, str, str]] = [
 ]
 
 
-def _apply_rag(name: str, typ: type, raw, cur: dict) -> None:
-    """Coerce, validate, and set one retrieval param; print before/after."""
-    from scirag.config import set_retrieval_param
+def _apply_rag(name: str, typ: type, raw, cur: dict, persist: bool = False) -> None:
+    """Coerce, validate, and set one retrieval param; print before/after.
+    persist=True writes the default to settings.yaml; otherwise it's session-only."""
+    from scirag.config import set_default_retrieval_param, set_retrieval_param
+
+    set_param = set_default_retrieval_param if persist else set_retrieval_param
 
     try:
         val = (
@@ -573,8 +591,9 @@ def _apply_rag(name: str, typ: type, raw, cur: dict) -> None:
         return
 
     old = cur.get(name)
-    set_retrieval_param(name, val)
-    console.print(f"[cyan]{name}[/]: {old} → [cyan]{val}[/]")
+    set_param(name, val)
+    suffix = "  [dim](saved as default)[/]" if persist else ""
+    console.print(f"[cyan]{name}[/]: {old} → [cyan]{val}[/]{suffix}")
 
     if name == "final_k":
         cap = cur["top_k"] + (cur["bm25_k"] if cur.get("hybrid") else 0)
@@ -585,11 +604,13 @@ def _apply_rag(name: str, typ: type, raw, cur: dict) -> None:
             )
 
 
-def do_rag(arg: str = "") -> None:
-    """Interactively tune the live retrieval parameters, or set one directly.
+def do_rag(arg: str = "", persist: bool = False) -> None:
+    """Interactively tune the retrieval parameters, or set one directly.
 
     `/rag`                 → popup to pick a parameter, with help on what it affects.
     `/rag final_k 4`       → set one parameter directly (shorthand).
+
+    persist=True saves defaults to settings.yaml (CLI); otherwise session-only.
     """
     from scirag.config import get_retrieval
 
@@ -604,7 +625,7 @@ def do_rag(arg: str = "") -> None:
             console.print(f"[dim]Tunable: {', '.join(spec)}[/]")
             return
         if len(parts) >= 2:
-            _apply_rag(parts[0], spec[parts[0]][0], " ".join(parts[1:]), cur)
+            _apply_rag(parts[0], spec[parts[0]][0], " ".join(parts[1:]), cur, persist=persist)
             return
         # single known token → fall through to interactive (pre-select handled below)
 
@@ -643,7 +664,7 @@ def do_rag(arg: str = "") -> None:
         if val is None:
             console.print("[dim]Unchanged.[/]")
             return
-        _apply_rag(name, typ, val, cur)
+        _apply_rag(name, typ, val, cur, persist=persist)
     else:
         raw = _ask(
             questionary.text(f"New value for {name} (Esc to cancel):", default=str(cur[name]))
@@ -651,7 +672,7 @@ def do_rag(arg: str = "") -> None:
         if raw is None or raw.strip() == str(cur[name]):
             console.print("[dim]Unchanged.[/]")
             return
-        _apply_rag(name, typ, raw, cur)
+        _apply_rag(name, typ, raw, cur, persist=persist)
 
 
 # Conversation history for /llm — lives for the duration of the process.
@@ -1051,7 +1072,6 @@ def _write_home_env(env: dict[str, str]) -> None:
 
 def do_env(action: str = "", key: str = "", value: str = "") -> None:
     """Show, set, or unset environment variables in ~/.scirag-agent/.env."""
-    import os
     from rich.table import Table
 
     home_env = _read_home_env()
@@ -1410,166 +1430,88 @@ def do_clear_db(force: bool = False) -> None:
 # Typer subcommands (thin wrappers — all logic lives in do_* above)
 # ---------------------------------------------------------------------------
 
-
-# Reused flag help (single source — read by the shell's completer/toolbar too).
-_RETMAX_HELP = "max number of results to fetch"
-_DAYS_BACK_HELP = "how many days back to search bioRxiv (via Europe PMC)"
-_FULL_TEXT_HELP = "also fetch + index each paper's full-text Results section (slower)"
-_YEAR_FROM_HELP = "earliest publication year to include (e.g. 2018)"
-_YEAR_TO_HELP = "latest publication year to include (e.g. 2024)"
-_SEMANTIC_HELP = (
-    "search PubMed by relevance via Europe PMC instead of NCBI esearch — "
-    "tolerates natural-language questions (e.g. 'disorders of the retrosplenial cortex in humans')"
-)
+# Shared --project / --global options for the index-touching CLI commands.
+_PROJECT_OPT = typer.Option("", "--project", help="Target this project for this run only.")
+_GLOBAL_OPT = typer.Option(False, "--global", help="Target the global index for this run only.")
 
 
-@app.command()
-def index(
-    query: str,
-    retmax: int = typer.Option(25, help=_RETMAX_HELP),
-    full_text: bool = typer.Option(False, help=_FULL_TEXT_HELP),
-    year_from: str = typer.Option("", help=_YEAR_FROM_HELP),
-    year_to: str = typer.Option("", help=_YEAR_TO_HELP),
-    semantic: bool = typer.Option(False, help=_SEMANTIC_HELP),
-):
-    """Fetch, preview, select, and index PubMed articles interactively."""
-    do_index(query, retmax, full_text, year_from=year_from, year_to=year_to, semantic=semantic)
+def _scope_project(project: str, use_global: bool) -> None:
+    """Scope this invocation to a project (or the global index) via SCIRAG_PROJECT,
+    without touching the persisted active project. No flag = current active project."""
+    if project and use_global:
+        console.print("[red]Pass either --project or --global, not both.[/]")
+        raise typer.Exit(1)
+    if use_global:
+        os.environ["SCIRAG_PROJECT"] = ""  # explicit global index
+    elif project:
+        from scirag.projects import list_projects
 
-
-@app.command()
-def bindex(
-    query: str,
-    retmax: int = typer.Option(25, help=_RETMAX_HELP),
-    days_back: int = typer.Option(180, help=_DAYS_BACK_HELP),
-    full_text: bool = typer.Option(False, help=_FULL_TEXT_HELP),
-    year_from: str = typer.Option("", help=_YEAR_FROM_HELP),
-    year_to: str = typer.Option("", help=_YEAR_TO_HELP),
-):
-    """Fetch, preview, select, and index bioRxiv preprints interactively.
-
-    Search is relevance-ranked via Europe PMC, so a natural-language question works
-    directly — no Boolean syntax and no --semantic flag (unlike `index`, this path
-    never used NCBI esearch).
-    """
-    do_bindex(query, retmax, days_back, full_text, year_from=year_from, year_to=year_to)
-
-
-@app.command()
-def retrieve(query: str):
-    """Query the local index and show retrieved chunks (no LLM)."""
-    do_retrieve(query)
-
-
-@app.command()
-def show(pmid: str):
-    """Print a paper's stored abstract/results text by PMID."""
-    do_show(pmid)
+        if not any(p["name"] == project for p in list_projects()):
+            console.print(f"[red]Project {project!r} not found.[/]")
+            raise typer.Exit(1)
+        os.environ["SCIRAG_PROJECT"] = project
 
 
 @app.command()
 def ask(
     query: str = typer.Argument("", help="Question to ask. Omit with --reset to clear history."),
     reset: bool = typer.Option(False, "--reset", help="Clear conversation history."),
+    project: str = _PROJECT_OPT,
+    global_: bool = _GLOBAL_OPT,
 ):
     """Ask a question grounded in the indexed papers, with conversation memory."""
+    _scope_project(project, global_)
     do_llm(query, reset=reset)
 
 
 @app.command()
-def ui(port: int = typer.Option(8000, "--port", "-p", help="Port to listen on.")):
+def ui(
+    port: int = typer.Option(8000, "--port", "-p", help="Port to listen on."),
+    project: str = _PROJECT_OPT,
+    global_: bool = _GLOBAL_OPT,
+):
     """Launch the Chainlit web UI for RAG chat."""
+    _scope_project(project, global_)  # inherited by the Chainlit subprocess via env
     do_llm_ui(port)
 
 
-@app.command(name="import")
-def import_(path: str):
-    """Index a PDF file or every PDF in a directory (auto-detected)."""
-    do_import(path)
-
-
-@app.command(name="import-mendeley")
-def import_mendeley(
-    query: str,
-    retmax: int = typer.Option(25, help=_RETMAX_HELP),
-):
-    """Search the local Mendeley library, select, and index papers (offline)."""
-    do_import_mendeley(query, retmax)
-
-
-@app.command(name="import-zotero")
-def import_zotero(
-    query: str,
-    retmax: int = typer.Option(25, help=_RETMAX_HELP),
-):
-    """Search the local Zotero library, select, and index papers (offline)."""
-    do_import_zotero(query, retmax)
-
-
-@app.command(name="import-text")
-def import_text():
-    """Index free-form text entered interactively (prompts for title, identifier, etc.)."""
-    do_text_index()
-
-
+# model / effort / rag persist a default to ~/.scirag-agent/settings.yaml (persist=True).
+# The same helpers run session-only inside the shell (/model, /effort, /rag).
 @app.command()
-def model(backend_key: str = typer.Argument("", help="Backend key to switch to. Omit to list.")):
-    """List available LLM backends or switch the active model."""
-    do_model(backend_key)
+def model(
+    backend_key: str = typer.Argument("", help="Backend key. Omit for an interactive picker."),
+):
+    """Set the default LLM backend (saved to settings.yaml). Omit the key to pick interactively."""
+    do_model(backend_key, persist=True)
 
 
 @app.command()
 def effort(
-    level: str = typer.Argument("", help="Reasoning effort: low/medium/high. Omit to show."),
+    level: str = typer.Argument("", help="low/medium/high. Omit to show the current default."),
 ):
-    """Show or set the LLM reasoning effort (speed vs. accuracy)."""
-    do_effort(level)
+    """Set the default reasoning effort (saved to settings.yaml)."""
+    do_effort(level, persist=True)
 
 
 @app.command()
-def rag(params: list[str] = typer.Argument(None, help="Optional <param> <value> to set directly.")):
-    """Tune retrieval parameters (final_k, top_k, …). No args = interactive picker."""
-    do_rag(" ".join(params) if params else "")
-
-
-@app.command(name="clear-db")
-def clear_db(force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt.")):
-    """Delete the entire local index (irreversible)."""
-    do_clear_db(force=force)
+def rag(
+    params: list[str] = typer.Argument(
+        None, help="<param> <value>; omit for an interactive picker."
+    ),
+):
+    """Set default retrieval parameters (saved to settings.yaml). No args = interactive picker."""
+    do_rag(" ".join(params) if params else "", persist=True)
 
 
 @app.command()
 def export(
     path: str = typer.Argument("", help="Output CSV path (default: ./scirag-<project>.csv)."),
+    project: str = _PROJECT_OPT,
+    global_: bool = _GLOBAL_OPT,
 ):
     """Export the active project's indexed papers' metadata to CSV."""
+    _scope_project(project, global_)
     do_export(path)
-
-
-@app.command(name="delete-project")
-def delete_project_cmd(
-    name: str,
-    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt."),
-):
-    """Delete a project and its entire index (irreversible)."""
-    import questionary
-    from scirag.projects import delete_project, get_active_project, list_projects
-
-    if not any(p["name"] == name for p in list_projects()):
-        console.print(f"[red]Project {name!r} not found.[/]")
-        raise typer.Exit(1)
-    if not force:
-        confirmed = questionary.confirm(
-            f"Delete project '{name}' and all its indexed articles? This cannot be undone."
-        ).ask()
-        if not confirmed:
-            console.print("[dim]Cancelled.[/]")
-            return
-    delete_project(name)
-    console.print(f"[green]Project [cyan]{name}[/] deleted.[/]")
-    if get_active_project() != name:
-        pass
-    else:
-        console.print("[dim]Switched to default global index.[/]")
 
 
 @app.command()

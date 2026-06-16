@@ -60,12 +60,26 @@ _COMMANDS: list[tuple[str, str, str]] = [
 
 
 def _build_flag_help() -> dict[str, str]:
-    """Per-flag help (for the completion meta + bottom toolbar), read straight from
-    the Typer command definitions in scirag.cli — the same source as
-    `scirag <cmd> --help`, so the two never drift. `/project --default` is a
-    shell-only flag with no Typer command, so it's supplemented here.
+    """Per-flag help (for the completion meta + bottom toolbar).
+
+    Flags of shell-only commands (index/bindex/import-*/clear-db/delete-project/project)
+    are defined here — those commands have no Typer equivalent anymore. Flags of the
+    commands that DO still exist in the CLI (`ask --reset`, `ui --port`) are harvested
+    from Typer below so they never drift from `scirag <cmd> --help`.
     """
-    help_map = {"--default": "switch to the default global index"}
+    help_map = {
+        "--default": "switch to the default global index",
+        "--retmax": "max number of results to fetch",
+        "--full-text": "also fetch + index each paper's full-text Results section (slower)",
+        "--semantic": (
+            "search PubMed by relevance via Europe PMC instead of NCBI esearch — tolerates "
+            "natural-language questions (e.g. 'disorders of the retrosplenial cortex in humans')"
+        ),
+        "--days-back": "how many days back to search bioRxiv (via Europe PMC)",
+        "--year-from": "earliest publication year to include (e.g. 2018)",
+        "--year-to": "latest publication year to include (e.g. 2024)",
+        "--force": "skip the confirmation prompt",
+    }
     try:
         import typer
 

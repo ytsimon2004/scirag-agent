@@ -27,17 +27,19 @@ the `claude`/`codex` CLIs) — sit behind one LiteLLM router, selectable per age
   speed by passing Ollama's `think: False` (or appending `/no_think` to the prompt);
   prefer a non-thinking backend (`local-llama4-scout`) for high-frequency agents and
   reserve a reasoning model (`local-deepseek-r1-32b`) for where it earns its cost.
-- Swap models per agent in `configs/models.yaml` (or at runtime with `scirag model`),
-  never in code.
-- `scirag effort low|medium|high` (or `/effort` in the shell) tunes reasoning depth vs.
-  speed for the session. The router maps it per backend (`llm/router.py`): Ollama thinking
+- **model / effort / rag have two surfaces** (`config.py`): the **CLI** (`scirag model|effort|rag`)
+  persists a *default* to `~/.scirag-agent/settings.yaml`; the **shell** (`/model`,`/effort`,`/rag`)
+  sets a *session* override. Resolution order: session override → `settings.yaml` default →
+  shipped YAML config. Never hardcode model choices in code — swap in `configs/models.yaml`
+  or via these.
+- Reasoning effort (`/effort low|medium|high`, or `scirag effort` for the default) tunes
+  reasoning depth vs. speed. The router maps it per backend (`llm/router.py`): Ollama thinking
   models toggle `think` (low = off); Claude/OpenAI APIs use litellm's `reasoning_effort`;
   the CLI backends pass it through too (`claude -p --effort`, `codex -c
-  model_reasoning_effort`). Effort also scales the answer token budget. Session-only,
-  defaults to `medium`.
-- `scirag rag` (or `/rag` in the shell) tunes retrieval params live — `final_k`, `top_k`,
-  `bm25_k`, `hybrid`, `rag_score_threshold`, `rerank` — via a picker with per-param help, or
-  `/rag final_k 4` shorthand. Session-only overrides merged in `config.get_retrieval()`
+  model_reasoning_effort`). Effort also scales the answer token budget. Defaults to `medium`.
+- Retrieval params (`/rag`, or `scirag rag` for the default) — `final_k`, `top_k`,
+  `bm25_k`, `hybrid`, `rag_score_threshold`, `rerank` — set via a picker with per-param help, or
+  `/rag final_k 4` shorthand. Merged in `config.get_retrieval()`
   (which `retriever.py` and `agents/pipeline.py` read); `chunk_size`/`chunk_overlap` are
   index-time only and intentionally excluded.
 - Retrieval (`retrieval/retriever.py`) = dense (bge-m3) + BM25 → RRF fusion → optional
@@ -58,8 +60,15 @@ the `claude`/`codex` CLIs) — sit behind one LiteLLM router, selectable per age
   no API keys needed.
 
 ## Layout
-- `src/scirag/config.py` — loads `configs/models.yaml` + `configs/pipeline.yaml` + `.env`.
+- `src/scirag/config.py` — loads `configs/models.yaml` + `configs/pipeline.yaml` + `.env`,
+  plus the `~/.scirag-agent/settings.yaml` overlay (persistent model/effort/rag defaults
+  set via the CLI; session overrides layer on top).
 - `src/scirag/projects.py` — project management; each project is an isolated LanceDB index.
+  Index access routes through `get_active_db_uri()`, resolved as: `using_project()` scope
+  → `SCIRAG_PROJECT` env → persisted `.active_project`. The active project is shared across
+  shell and CLI; the CLI's `ask`/`export`/`ui` accept `--project <name>`/`--global` to scope
+  one run (via `SCIRAG_PROJECT`, which also crosses the `ui` Chainlit subprocess) without
+  mutating it.
 - `src/scirag/llm/router.py` — `complete(agent, messages)`; the ONLY place LLMs are called.
 - `src/scirag/agents/pipeline.py` — canonical RAG pipeline: entity extraction ->
   retrieval -> relevance gating -> grounded-prompt assembly.
@@ -80,22 +89,30 @@ the `claude`/`codex` CLIs) — sit behind one LiteLLM router, selectable per age
 - `src/scirag/cli.py` — Typer CLI entry point (`scirag = scirag.cli:app`).
 
 ## Run
+The CLI is deliberately small — launch, configure, and the two scriptable ops.
+Everything operational (index/bindex/retrieve/show/import*/remove/clear-db/projects)
+is interactive and lives only in the **shell**.
 ```
+# CLI (outside the shell)
 scirag                                          # interactive shell (no args)
-scirag index --retmax 30                        # interactively fetch/select/index PubMed
-scirag bindex --days-back 180 --full-text       # interactively index bioRxiv preprints
-scirag retrieve "place cells remapping"         # show retrieved chunks, no LLM
-scirag ask "How do place cells remap across environments?"   # grounded, cited answer
 scirag ui                                       # Chainlit web UI (needs --extra ui)
-scirag import path/to/paper.pdf                 # index a PDF (or a dir of PDFs)
-scirag model                                    # list backends; pass a key to switch
-scirag effort high                              # set reasoning effort (low/medium/high)
-scirag rag                                      # tune retrieval params (final_k, top_k, …) — picker
-scirag show <pmid|doi>                           # print a stored record's text
+scirag ask "How do place cells remap across environments?"   # one-shot grounded answer
+scirag export [path]                            # export indexed papers' metadata to CSV
 scirag env set NCBI_API_KEY <key>               # manage API keys in ~/.scirag-agent/.env
+scirag model claude-sonnet                      # persist default backend → settings.yaml
+scirag effort high                              # persist default reasoning effort
+scirag rag final_k 12                           # persist default retrieval param
 uv run python -m scirag.mcp_server.server       # MCP server (needs --extra mcp)
+
+# Shell commands (inside `scirag`)
+/index "retrosplenial cortex" --semantic        # fetch/select/index PubMed (sentences ok)
+/bindex "how do place cells remap"              # index bioRxiv (always relevance-ranked)
+/retrieve "place cells remapping"  ·  /show <pmid|doi>  ·  /import path/to.pdf
+/import-mendeley · /import-zotero · /import-text  ·  /model · /effort · /rag (session-only)
 ```
 (`scirag` is the installed console script; prefix with `uv run` if not on PATH.)
+`scirag model|effort|rag` persist a **default** to `~/.scirag-agent/settings.yaml`; the
+shell `/model`,`/effort`,`/rag` are **session** overrides on top (see Models & reasoning).
 
 ## Conventions
 - **All LLM calls go through `scirag.llm.router.complete(agent, ...)`** — never call

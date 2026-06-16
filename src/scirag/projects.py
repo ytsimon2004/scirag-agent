@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import contextvars
 import json
+import os
 from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
@@ -59,12 +60,20 @@ def get_active_project() -> str | None:
 def get_active_db_uri() -> str:
     """Return the LanceDB URI for the active project, or the global default.
 
-    A `using_project()` scope (process-local) takes precedence over the persisted
-    active project, so a single operation can target a different index without
-    side-effecting the shared state.
+    Resolution precedence, highest first:
+      1. a `using_project()` scope (process-local ContextVar),
+      2. the ``SCIRAG_PROJECT`` env var — a name, or empty string for the global
+         index (this is how the CLI's ``--project``/``--global`` scope a one-shot run,
+         and it crosses the `ui` Chainlit subprocess boundary via inherited env),
+      3. the persisted active project (``.active_project``).
+    None of these mutate the persisted active project.
     """
     override = _project_override.get()
-    name = override if override is not _UNSET else get_active_project()
+    if override is not _UNSET:
+        name = override
+    else:
+        env_proj = os.environ.get("SCIRAG_PROJECT")
+        name = (env_proj or None) if env_proj is not None else get_active_project()
     if name:
         return str(_data_dir() / "projects" / name / "lancedb")
     return str(_data_dir() / "lancedb")

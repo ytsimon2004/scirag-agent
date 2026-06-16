@@ -147,7 +147,9 @@ scirag[rsc] ❯ /model claude-sonnet   # switch (or use arrow keys with bare /mo
 | `openai-gpt4o` / `openai-o3` | `openai/gpt-4o` / `openai/o3` | `OPENAI_API_KEY` |
 | `claude-code` / `codex` | local `claude -p` / `codex` CLI subprocess | that CLI installed + signed in |
 
-Switching applies to the current session only — `configs/models.yaml` is never modified.
+Switching in the shell applies to the current session only — `configs/models.yaml`
+is never modified. To set a persistent default backend, use `scirag model <key>` from
+the CLI (saved to `~/.scirag-agent/settings.yaml`).
 
 ### API keys (only for frontier backends)
 
@@ -270,8 +272,12 @@ scirag[rsc] ❯ /rag rerank on        # cross-encoder rerank (needs --extra rera
 | `rerank` | Re-score candidates with a cross-encoder, keep the best `final_k` |
 | `rag_score_threshold` | Min similarity to answer from your papers vs. general knowledge |
 
-Both `/effort` and `/rag` are session-only (reset each launch); `/status` shows
-the active values.
+In the shell, `/model`, `/effort`, and `/rag` are **session-only** (reset each
+launch); `/status` shows the active values. To set a **persistent default** instead,
+use the CLI — `scirag model claude-sonnet`, `scirag effort high`, `scirag rag final_k 12`
+— which writes to `~/.scirag-agent/settings.yaml` and is read at every launch. The
+resolution order is: shell session override → `settings.yaml` default → shipped
+YAML config.
 
 ### Import PDFs
 
@@ -353,8 +359,35 @@ answer with conversation history). Commands all start with `/`:
 | `/create-project <name> [desc]` / `/project [name\|--default]` / `/delete-project <name>` | Manage projects |
 | `/help` · `/clear` · `/exit` | Help, reset conversation, quit |
 
-All commands are also available as CLI subcommands: `scirag index "…"`,
-`scirag show 32147692`, `scirag ask "…"`, etc.
+### CLI (outside the shell)
+
+The shell is the main interface; the CLI is a small surface for the things you do
+**without** entering it — launching, configuring, and scripting:
+
+| Command | Description |
+|---|---|
+| `scirag` | Open the interactive shell (no args) |
+| `scirag ui [--port N]` | Launch the Chainlit web UI |
+| `scirag ask "<question>"` | One-shot grounded answer (scriptable, pipeable) |
+| `scirag export [path]` | Export indexed metadata to CSV |
+| `scirag env [set\|unset <KEY> <val>]` | Manage API keys in `~/.scirag-agent/.env` |
+| `scirag model [key]` / `effort [low\|med\|high]` / `rag [<param> <value>]` | Set **persistent defaults** in `~/.scirag-agent/settings.yaml` |
+
+Everything else (indexing, retrieval, import, project & index management) is
+interactive and lives only in the shell. Note `model`/`effort`/`rag` differ by
+surface: the **CLI** sets a saved default; the **shell** `/model`,`/effort`,`/rag`
+are session-only overrides on top of it.
+
+**Which project?** `ask`, `export`, and `ui` use the **active project** (whatever the
+shell's `/project` last selected, stored in `~/.scirag-agent/.active_project`) — it's
+shared state across the shell and CLI. To target a different one for a single run
+without changing the active project, pass `--project <name>` or `--global` (these set
+`SCIRAG_PROJECT` for that invocation only):
+
+```
+scirag ask "place cell remapping?" --project rsc
+scirag export --global out.csv
+```
 
 ---
 
