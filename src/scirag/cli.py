@@ -513,6 +513,82 @@ def do_effort(level: str = "", persist: bool = False) -> None:
     console.print(f"Reasoning effort set to [cyan]{get_effort()}[/]{suffix}")
 
 
+def do_system_prompt(clear: bool = False, edit: bool = False) -> None:
+    """Show, edit, or clear the active project's system prompt (per-project).
+
+    With no active project there is nothing to set — the global index always uses
+    the built-in default. `edit=True` opens the current prompt in $EDITOR (vim);
+    `clear=True` resets to the built-in default.
+    """
+    from scirag.agents.synthesize import SYSTEM as DEFAULT_SYSTEM
+    from scirag.projects import (
+        get_active_project,
+        get_active_system_prompt,
+        set_project_system_prompt,
+    )
+
+    proj = get_active_project()
+
+    if edit:
+        if not proj:
+            console.print(
+                "[yellow]No active project.[/] The system prompt is per-project; "
+                "switch to one with /project <name> first."
+            )
+            return
+        import os
+        import shlex
+        import subprocess
+        import tempfile
+
+        editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "vim"
+        with tempfile.NamedTemporaryFile("w+", suffix=".txt", delete=False) as fh:
+            fh.write(get_active_system_prompt())  # seed with the current prompt
+            path = fh.name
+        try:
+            subprocess.call(shlex.split(editor) + [path])
+            with open(path) as fh:
+                new = fh.read().strip()
+        finally:
+            os.unlink(path)
+        set_project_system_prompt(proj, new)
+        if new:
+            console.print(
+                f"System prompt for [yellow]{proj}[/] updated [dim]({len(new)} chars)[/]."
+            )
+        else:
+            console.print(f"System prompt for [yellow]{proj}[/] reset to [cyan]default[/] (empty).")
+        return
+
+    if clear:
+        if not proj:
+            console.print(
+                "[yellow]No active project.[/] The system prompt is per-project; "
+                "switch to one with /project <name> first."
+            )
+            return
+        set_project_system_prompt(proj, "")
+        console.print(f"System prompt for [yellow]{proj}[/] reset to [cyan]default[/].")
+        return
+
+    # Showing (no flags) works even on the global index — print the active
+    # project's prompt, or the built-in default text it would otherwise use.
+    cur = get_active_system_prompt() if proj else ""
+    if cur:
+        console.print(
+            f"System prompt for [yellow]{proj}[/] [dim](appended to the built-in "
+            f"default below; edit with /system-prompt --edit)[/]:\n[cyan]{cur}[/]\n"
+        )
+    elif proj:
+        console.print(
+            f"[yellow]{proj}[/] uses the built-in default [dim](no custom prompt; "
+            f"set one with /system-prompt --edit)[/]:"
+        )
+    else:
+        console.print("[dim]No active project — the global index uses the built-in default:[/]")
+    console.print(f"[dim]{DEFAULT_SYSTEM}[/]")
+
+
 # Live retrieval params the user can tune at runtime. chunk_size/chunk_overlap are
 # deliberately excluded — they only apply at index time, so changing them here
 # would do nothing to already-indexed papers.
@@ -1187,9 +1263,11 @@ def print_system_info() -> None:
     from rich.panel import Panel
     from rich.table import Table
 
+    import textwrap
+
     from scirag.config import active_backend_key, get_effort, get_retrieval, models_cfg
     from scirag.ingest.index import get_indexed_pmids
-    from scirag.projects import get_active_project
+    from scirag.projects import get_active_project, get_active_system_prompt
 
     emb = models_cfg()["embeddings"]["model"]
     llm_key = active_backend_key("synthesizer")
@@ -1228,6 +1306,11 @@ def print_system_info() -> None:
     grid.add_row(
         "project",
         f"[yellow]{project}[/]" if get_active_project() else f"[dim]{project}[/]",
+    )
+    sp = get_active_system_prompt()
+    grid.add_row(
+        "system",
+        f"[dim]{textwrap.shorten(sp, 60)}[/]" if sp else "[dim]default[/]",
     )
     grid.add_row("index", f"[dim]{index_str}[/]")
 

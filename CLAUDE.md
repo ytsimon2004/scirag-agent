@@ -70,7 +70,11 @@ the `claude`/`codex` CLIs) — sit behind one LiteLLM router, selectable per age
   → `SCIRAG_PROJECT` env → persisted `.active_project`. The active project is shared across
   shell and CLI; the CLI's `ask`/`export`/`ui` accept `--project <name>`/`--global` to scope
   one run (via `SCIRAG_PROJECT`, which also crosses the `ui` Chainlit subprocess) without
-  mutating it.
+  mutating it. Each project also carries an optional `system_prompt` (stored in
+  `projects.json`); `get_active_system_prompt()` resolves it with the same precedence and
+  `pipeline.py` appends it to the synthesis system prompt (blank = built-in default). Set it
+  at `/create-project` (interactive single line) or later with `/system-prompt --edit` ($EDITOR);
+  the global index has none.
 - `src/scirag/llm/router.py` — `complete(agent, messages)`; the ONLY place LLMs are called.
 - `src/scirag/agents/pipeline.py` — canonical RAG pipeline: entity extraction ->
   retrieval -> relevance gating -> grounded-prompt assembly.
@@ -133,6 +137,8 @@ uv run python -m scirag.mcp_server.server       # MCP server (needs --extra mcp)
 /bindex "how do place cells remap"              # index bioRxiv (always relevance-ranked)
 /retrieve "place cells remapping"  ·  /show <pmid|doi>  ·  /import path/to.pdf
 /import-mendeley · /import-zotero · /import-text  ·  /model · /effort · /rag (session-only)
+/create-project <name>                          # prompts for an optional system prompt
+/system-prompt [--edit] [--default]             # view the project's prompt (--edit → $EDITOR, --default resets)
 ```
 (`scirag` is the installed console script; prefix with `uv run` if not on PATH.)
 `scirag model|effort|rag` persist a **default** to `~/.scirag-agent/settings.yaml`; the

@@ -37,6 +37,11 @@ _COMMANDS: list[tuple[str, str, str]] = [
     ("/model", "[backend-key]", "list or switch LLM backend"),
     ("/effort", "[low|medium|high]", "set LLM reasoning effort (speed vs. accuracy)"),
     ("/rag", "[<param> <value>]", "tune retrieval params (final_k, top_k, …); no args = picker"),
+    (
+        "/system-prompt",
+        "[--edit] [--default]",
+        "view the active project's system prompt (--edit opens $EDITOR, --default resets)",
+    ),
     ("/import", "<path>", "index a PDF file, or every PDF in a directory"),
     ("/import-mendeley", "<query> [--retmax N]", "search + select + index Mendeley library papers"),
     ("/import-zotero", "<query> [--retmax N]", "search + select + index Zotero library papers"),
@@ -418,7 +423,7 @@ def _dispatch(line: str) -> None:
             return
         name = positional[0]
         desc = " ".join(positional[1:])
-        from scirag.projects import create_project, set_active_project
+        from scirag.projects import create_project, set_active_project, set_project_system_prompt
 
         try:
             create_project(name, desc)
@@ -426,6 +431,17 @@ def _dispatch(line: str) -> None:
             console.print(f"Created project [cyan]{name}[/] and switched to it.")
         except ValueError as e:
             console.print(f"[red]Error:[/] {e}")
+            return
+
+        from prompt_toolkit import prompt as _prompt_one
+
+        try:
+            sp = _prompt_one("System prompt (Enter = default): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            sp = ""
+        if sp:
+            set_project_system_prompt(name, sp)
+            console.print("[dim]System prompt set.[/]")
         return
 
     if cmd == "/project":
@@ -541,6 +557,11 @@ def _dispatch(line: str) -> None:
         from scirag.cli import do_rag
 
         do_rag(query)
+
+    elif cmd == "/system-prompt":
+        from scirag.cli import do_system_prompt
+
+        do_system_prompt(clear=bool(flags.get("default")), edit=bool(flags.get("edit")))
 
     elif cmd == "/import":
         if not query:

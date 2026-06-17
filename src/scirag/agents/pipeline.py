@@ -18,6 +18,7 @@ from scirag.agents.synthesize import SYSTEM as SYSTEM_GROUNDED
 from scirag.agents.synthesize import _format_sources
 from scirag.config import get_retrieval
 from scirag.ingest.index import get_indexed_pmids
+from scirag.projects import get_active_system_prompt
 from scirag.retrieval.retriever import retrieve
 
 # Used when retrieval finds nothing relevant enough to ground the answer.
@@ -74,6 +75,12 @@ def prepare_answer(
         nodes = []
         user_content = query
         system = SYSTEM_GENERAL
+
+    # Append the active project's system prompt (domain steering) to whichever
+    # base prompt was chosen, preserving its citation/grounding rules.
+    extra = get_active_system_prompt()
+    if extra:
+        system = f"{system}\n\n{extra}"
 
     messages = [{"role": "system", "content": system}]
     messages.extend(history or [])
