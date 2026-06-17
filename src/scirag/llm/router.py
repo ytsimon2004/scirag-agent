@@ -46,7 +46,10 @@ def _flatten_messages(messages: list[dict[str, str]]) -> str:
             parts.append(content)
         else:
             parts.append(f"{role.upper()}: {content}")
-    return "\n\n".join(parts)
+    # Strip null bytes: subprocess CLI backends reject argv strings containing
+    # \x00 (raised as "embedded null byte"), and pypdf-extracted chunk text can
+    # carry them through from certain font encodings. Harmless for API backends.
+    return "\n\n".join(parts).replace("\x00", "")
 
 
 def _complete_claude_cli(messages: list[dict[str, str]], effort: str = "medium") -> str:

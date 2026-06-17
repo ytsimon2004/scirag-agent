@@ -70,7 +70,9 @@ _END_SECTION_RE = re.compile(
 def extract_text_from_pdf(path: Path) -> str:
     """Extract all text from a PDF, page by page."""
     reader = pypdf.PdfReader(str(path))
-    return "\n".join(page.extract_text() or "" for page in reader.pages)
+    # Drop null bytes: some font encodings make pypdf emit \x00, which later
+    # crashes subprocess CLI backends ("embedded null byte"). See router.py.
+    return "\n".join(page.extract_text() or "" for page in reader.pages).replace("\x00", "")
 
 
 def extract_results_section(text: str) -> str:
@@ -228,7 +230,7 @@ def load_pdf_as_article(path: Path) -> Article | None:
     metadata.
     """
     reader = pypdf.PdfReader(str(path))
-    text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    text = extract_text_from_pdf(path)
     results = extract_results_section(text)
 
     stem = path.stem
