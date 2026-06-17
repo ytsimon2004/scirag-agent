@@ -31,3 +31,6 @@ htmlcov/
 # Chainlit auto-generated files
 chainlit.md
 .chainlit/
+
+# Sphinx docs build output
+docs/_build/
