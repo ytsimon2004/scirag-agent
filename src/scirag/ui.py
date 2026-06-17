@@ -6,8 +6,11 @@ Or directly:           uv run --extra ui chainlit run src/scirag/ui.py
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import chainlit as cl
-from chainlit.input_widget import Select, Slider, Switch
+from chainlit.input_widget import Select, Slider, Switch, TextInput
 
 from scirag.agents.pipeline import prepare_answer
 from scirag.config import (
@@ -20,12 +23,24 @@ from scirag.config import (
     set_retrieval_param,
 )
 from scirag.cite import citation
-from scirag.ingest.index import get_indexed_pmids
+from scirag.ingest.index import build_index, get_indexed_articles_full, get_indexed_pmids
 from scirag.llm.router import complete_stream
-from scirag.projects import get_active_project
+from scirag.projects import (
+    get_active_project,
+    get_active_system_prompt,
+    set_project_system_prompt,
+)
 
 _LLM_AGENTS = ("synthesizer", "critic", "planner", "retriever")
 _EFFORTS = ("low", "medium", "high")
+
+
+def _active_name() -> str | None:
+    """Active project name honouring the same precedence as the index reads:
+    ``SCIRAG_PROJECT`` env (set by ``scirag ui --project``) → persisted active
+    project. None means the global index (which has no system prompt)."""
+    env = os.environ.get("SCIRAG_PROJECT")
+    return (env or None) if env is not None else get_active_project()
 
 
 def _status_text() -> str:
@@ -52,9 +67,113 @@ def _status_text() -> str:
         f"| llm | `{llm_model}` · effort `{get_effort()}` |\n"
         f"| embedding | `{emb}` |\n"
         f"| retrieval | {retrieval_str} |\n\n"
-        f"Adjust the model, reasoning effort, and retrieval params in the ⚙️ settings "
-        f"panel. Ask a question about your indexed papers; type `/reset` to clear history."
+        f"Adjust the model, reasoning effort, retrieval params, and the project's "
+        f"**system prompt** in the ⚙️ settings panel. Ask a question about your indexed "
+        f"papers, or:\n\n"
+        f"- open the **📚 Studies** side panel to browse the papers indexed in this project\n"
+        f"- **drag PDFs into the chat** to import them into this project's index\n"
+        f"- `/reset` — clear the conversation history"
     )
+
+
+def _studies_text() -> str:
+    """Markdown table of the papers indexed in the active project."""
+    project = _active_name() or "global"
+    try:
+        arts = get_indexed_articles_full()
+    except Exception:
+        arts = []
+    if not arts:
+        return (
+            f"No studies are indexed in `{project}` yet. Index papers from the shell "
+            f"(`/index`, `/bindex`, `/import*`) or drag PDFs into the chat here."
+        )
+    arts.sort(key=lambda a: (str(a.get("year") or ""), a.get("first_author") or ""))
+    rows = [f"**{len(arts)} stud{'y' if len(arts) == 1 else 'ies'} in `{project}`**", ""]
+    rows.append("| citation | title | source | text | id |")
+    rows.append("|---|---|---|---|---|")
+    for a in arts:
+        cite = citation(a)
+        title = (a.get("title") or "—").replace("|", "·")[:80]
+        url = a.get("url") or ""
+        title_md = f"[{title}]({url})" if url else title
+        rows.append(
+            f"| {cite} | {title_md} | {a.get('origin', '?')} | "
+            f"{a.get('text_source') or 'abstract'} | `{a.get('pmid', '?')}` |"
+        )
+    return "\n".join(rows)
+
+
+async def _refresh_studies_sidebar() -> None:
+    """Populate the docked side panel ("Studies" tab) with this project's papers.
+
+    A persistent alternative to the `/studies` command — set on chat start and
+    refreshed after an import so the panel always mirrors the index.
+    """
+    try:
+        n = len(get_indexed_pmids())
+    except Exception:
+        n = 0
+    await cl.ElementSidebar.set_title(f"📚 Studies · {n}")
+    await cl.ElementSidebar.set_elements([cl.Text(name="studies", content=_studies_text())])
+
+
+@cl.action_callback("show_studies")
+async def _on_show_studies(action: cl.Action) -> None:
+    """Reopen/refresh the Studies panel. Chainlit drops the sidebar's header toggle
+    once you close it, so this button is the always-present way back in."""
+    await _refresh_studies_sidebar()
+
+
+def _collect_pdf_uploads(message: cl.Message) -> list[Path]:
+    """PDF paths among a message's uploaded file attachments (drag-and-drop)."""
+    paths: list[Path] = []
+    for el in message.elements or []:
+        path = getattr(el, "path", None)
+        if not path:
+            continue
+        mime = (getattr(el, "mime", "") or "").lower()
+        if path.lower().endswith(".pdf") or mime == "application/pdf":
+            paths.append(Path(path))
+    return paths
+
+
+async def _ingest_pdfs(paths: list[Path]) -> None:
+    """Resolve + index dropped PDFs into the active project, reporting progress.
+
+    Reuses the same resolve→Results-section→embed path as the shell's `/import`
+    (`load_pdf_as_article` + `build_index`). Unresolved PDFs are skipped and named.
+    """
+    from scirag.sources.pdf import load_pdf_as_article
+
+    project = _active_name() or "global"
+    async with cl.Step(name=f"Importing {len(paths)} PDF(s) → {project}", type="tool") as step:
+        articles = []
+        skipped: list[str] = []
+        for p in paths:
+            try:
+                art = load_pdf_as_article(p)
+            except Exception as exc:  # parse failure
+                skipped.append(f"`{p.name}` — {exc}")
+                continue
+            if art is None:
+                skipped.append(f"`{p.name}` — could not resolve to a PubMed/bioRxiv record")
+            else:
+                articles.append(art)
+        if articles:
+            build_index(articles)  # embeds via Ollama; blocking, mirrors the shell path
+        step.output = f"Indexed {len(articles)} · skipped {len(skipped)}"
+
+    lines = []
+    if articles:
+        lines.append(f"✅ Imported **{len(articles)}** paper(s) into `{project}`:")
+        lines += [f"- {citation(a.metadata())} — {a.title[:80]}" for a in articles]
+    if skipped:
+        lines.append(f"\n⚠️ Skipped **{len(skipped)}**:")
+        lines += [f"- {s}" for s in skipped]
+    await cl.Message(content="\n".join(lines) or "No PDFs found in the upload.").send()
+    if articles:
+        await _refresh_studies_sidebar()
 
 
 @cl.on_chat_start
@@ -114,10 +233,28 @@ async def on_start() -> None:
                 max=1.0,
                 step=0.05,
             ),
+            TextInput(
+                id="system_prompt",
+                label="System prompt (this project; blank = built-in default)",
+                initial=get_active_system_prompt(),
+                multiline=True,
+                placeholder="e.g. You are a careful neuroscience reviewer. Prefer primary…",
+            ),
         ]
     ).send()
 
-    await cl.Message(content=_status_text()).send()
+    await cl.Message(
+        content=_status_text(),
+        actions=[
+            cl.Action(
+                name="show_studies",
+                payload={},
+                label="📚 Studies",
+                tooltip="Open the studies panel for this project",
+            )
+        ],
+    ).send()
+    await _refresh_studies_sidebar()
 
 
 @cl.on_settings_update
@@ -140,7 +277,26 @@ async def on_settings_update(settings: dict) -> None:
     if settings.get("rag_score_threshold") is not None:
         set_retrieval_param("rag_score_threshold", float(settings["rag_score_threshold"]))
 
-    await cl.Message(content="Settings updated.\n\n" + _status_text()).send()
+    notes: list[str] = []
+    if "system_prompt" in settings:
+        new_prompt = (settings["system_prompt"] or "").strip()
+        name = _active_name()
+        if new_prompt != (get_active_system_prompt() or "").strip():
+            if name is None:
+                notes.append(
+                    "⚠️ The global index has no project — system prompt not saved. "
+                    "Create or switch to a project (`/create-project` in the shell) first."
+                )
+            else:
+                set_project_system_prompt(name, new_prompt)
+                notes.append(
+                    f"System prompt {'cleared' if not new_prompt else 'updated'} for `{name}`."
+                )
+
+    body = "Settings updated."
+    if notes:
+        body += "\n\n" + "\n\n".join(notes)
+    await cl.Message(content=body + "\n\n" + _status_text()).send()
 
 
 @cl.on_message
@@ -152,6 +308,18 @@ async def on_message(message: cl.Message) -> None:
         cl.user_session.set("history", [])
         await cl.Message(content="Conversation history cleared.").send()
         return
+
+    # --- List the studies indexed in this project ---
+    if query.lower() in ("/studies", "/papers"):
+        await cl.Message(content=_studies_text()).send()
+        return
+
+    # --- Import any PDFs dragged into the chat, then continue if a question remains ---
+    pdfs = _collect_pdf_uploads(message)
+    if pdfs:
+        await _ingest_pdfs(pdfs)
+        if not query:
+            return
 
     history: list[dict] = cl.user_session.get("history", [])
 
@@ -188,6 +356,12 @@ async def on_message(message: cl.Message) -> None:
     async for token in complete_stream("synthesizer", result.messages):
         answer += token
         await answer_msg.stream_token(token)
+    # Keep a reopen control near the latest turn — the welcome button scrolls away.
+    answer_msg.actions = [
+        cl.Action(
+            name="show_studies", payload={}, label="📚 Studies", tooltip="Open the studies panel"
+        )
+    ]
     await answer_msg.update()
 
     history.append({"role": "user", "content": query})
