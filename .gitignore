@@ -28,9 +28,13 @@ data/
 .coverage
 htmlcov/
 
-# Chainlit auto-generated files
-chainlit.md
-.chainlit/
+# Chainlit auto-generated files (root config.toml + chainlit.md are curated and tracked)
+.chainlit/*
+!.chainlit/config.toml
+.files/
+# Stray Chainlit boilerplate generated in a subdir before the UI cwd was pinned
+docs/chainlit.md
+docs/.chainlit/
 
 # Sphinx docs build output
 docs/_build/

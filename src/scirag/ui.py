@@ -71,7 +71,8 @@ def _status_text() -> str:
         f"**system prompt** in the ⚙️ settings panel. Ask a question about your indexed "
         f"papers, or:\n\n"
         f"- open the **📚 Studies** side panel to browse the papers indexed in this project\n"
-        f"- **drag PDFs into the chat** to import them into this project's index\n"
+        f"- **attach a PDF** (📎 button or drag-and-drop) to import a paper into this "
+        f"project's index — only PDFs are accepted\n"
         f"- `/reset` — clear the conversation history"
     )
 
@@ -125,17 +126,25 @@ async def _on_show_studies(action: cl.Action) -> None:
     await _refresh_studies_sidebar()
 
 
-def _collect_pdf_uploads(message: cl.Message) -> list[Path]:
-    """PDF paths among a message's uploaded file attachments (drag-and-drop)."""
-    paths: list[Path] = []
+def _collect_uploads(message: cl.Message) -> tuple[list[Path], list[str]]:
+    """Split a message's attachments into importable PDFs and rejected non-PDFs.
+
+    The UI only ingests PDFs (resolve → Results section → embed); anything else
+    is returned by name so the caller can tell the user instead of silently
+    dropping it. Covers both the 📎 attach button and drag-and-drop.
+    """
+    pdfs: list[Path] = []
+    rejected: list[str] = []
     for el in message.elements or []:
         path = getattr(el, "path", None)
         if not path:
             continue
         mime = (getattr(el, "mime", "") or "").lower()
         if path.lower().endswith(".pdf") or mime == "application/pdf":
-            paths.append(Path(path))
-    return paths
+            pdfs.append(Path(path))
+        else:
+            rejected.append(Path(path).name)
+    return pdfs, rejected
 
 
 async def _ingest_pdfs(paths: list[Path]) -> None:
@@ -163,6 +172,15 @@ async def _ingest_pdfs(paths: list[Path]) -> None:
         if articles:
             build_index(articles)  # embeds via Ollama; blocking, mirrors the shell path
         step.output = f"Indexed {len(articles)} · skipped {len(skipped)}"
+
+    # The uploaded PDF was only needed to extract + embed its text; the content
+    # now lives in LanceDB, so drop the staged copy in .files/ rather than letting
+    # uploads pile up under the app root.
+    for p in paths:
+        try:
+            p.unlink(missing_ok=True)
+        except OSError:
+            pass
 
     lines = []
     if articles:
@@ -314,12 +332,21 @@ async def on_message(message: cl.Message) -> None:
         await cl.Message(content=_studies_text()).send()
         return
 
-    # --- Import any PDFs dragged into the chat, then continue if a question remains ---
-    pdfs = _collect_pdf_uploads(message)
+    # --- Import any PDFs attached/dragged into the chat, then continue if a question remains ---
+    pdfs, rejected = _collect_uploads(message)
+    if rejected:
+        names = ", ".join(f"`{n}`" for n in rejected)
+        await cl.Message(
+            content=(
+                f"⚠️ Only **PDF** files can be imported here — skipped {len(rejected)}: {names}.\n\n"
+                "Attach a paper's PDF to add it to this project's index."
+            )
+        ).send()
     if pdfs:
         await _ingest_pdfs(pdfs)
-        if not query:
-            return
+    # Pure upload (or an empty message): nothing left to answer.
+    if not query:
+        return
 
     history: list[dict] = cl.user_session.get("history", [])
 

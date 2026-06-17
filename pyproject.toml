@@ -67,6 +67,12 @@ packages = ["src/scirag"]
 # fallback after the dev tree and ~/.scirag-agent/configs overrides.
 [tool.hatch.build.targets.wheel.force-include]
 "configs" = "scirag/configs"
+# Ship the Chainlit welcome screen inside the package so `scirag ui` finds it
+# even when launched from an arbitrary cwd or installed without a source
+# checkout (do_llm_ui anchors the subprocess cwd to the package dir then).
+"chainlit.md" = "scirag/chainlit.md"
+# Chainlit config (restricts the upload picker to PDFs) — same reason.
+".chainlit/config.toml" = "scirag/.chainlit/config.toml"
 
 [tool.ruff]
 line-length = 100

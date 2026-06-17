@@ -1206,6 +1206,7 @@ def do_env(action: str = "", key: str = "", value: str = "") -> None:
 
 def do_llm_ui(port: int = 8000) -> None:
     """Launch the Chainlit web UI and open it in the browser."""
+    import os
     import subprocess
     import time
     import webbrowser
@@ -1217,9 +1218,16 @@ def do_llm_ui(port: int = 8000) -> None:
         console.print("[red]chainlit not installed.[/] Run: [cyan]uv sync --extra ui[/]")
         return
 
+    from scirag.config import chainlit_app_root
+
     ui_path = Path(__file__).parent / "ui.py"
     url = f"http://localhost:{port}"
     console.print(f"Starting web UI at [link={url}]{url}[/link] …")
+
+    # Tell Chainlit where to read chainlit.md / .chainlit/config.toml and where to
+    # write its runtime files (.files/ uploads, translations, cache). Dev → repo
+    # root; installed → ~/.scirag-agent/chainlit/ (seeded), never site-packages.
+    env = {**os.environ, "CHAINLIT_APP_ROOT": str(chainlit_app_root())}
 
     proc = subprocess.Popen(
         [
@@ -1234,6 +1242,7 @@ def do_llm_ui(port: int = 8000) -> None:
             str(port),
             "--headless",
         ],
+        env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )

@@ -42,6 +42,39 @@ def _resolve_config(path: str | Path) -> Path:
     return Path(resources.files("scirag").joinpath(*p.parts))
 
 
+def chainlit_app_root() -> Path:
+    """Directory Chainlit uses as its app root (``CHAINLIT_APP_ROOT``).
+
+    Chainlit reads ``chainlit.md`` + ``.chainlit/config.toml`` from here and also
+    *writes* into it — ``.files/`` (uploaded PDFs), ``.chainlit/translations/`` and
+    a langchain cache. So it must be writable.
+
+    - **Dev checkout** → the repo root, where the tracked ``chainlit.md`` /
+      ``.chainlit/`` live (so edits there take effect immediately).
+    - **Installed** → ``~/.scirag-agent/chainlit/``, seeded once from the packaged
+      defaults. This keeps Chainlit from writing into a possibly read-only
+      ``site-packages`` and co-locates its state with the rest of the user's
+      scirag config; a user's edits to the welcome screen / config then persist.
+    """
+    if (ROOT / "chainlit.md").exists():
+        return ROOT
+
+    app_root = _USER_DIR / "chainlit"
+    (app_root / ".chainlit").mkdir(parents=True, exist_ok=True)
+    # Seed the welcome screen + config from the package on first launch only —
+    # never overwrite, so user customisations survive upgrades.
+    pkg = resources.files("scirag")
+    for rel in ("chainlit.md", ".chainlit/config.toml"):
+        dest = app_root / rel
+        if dest.exists():
+            continue
+        try:
+            dest.write_bytes(pkg.joinpath(*Path(rel).parts).read_bytes())
+        except (FileNotFoundError, OSError):
+            pass  # packaged copy missing (unexpected) — Chainlit falls back to its own defaults
+    return app_root
+
+
 def _load_yaml(path: str | Path) -> dict[str, Any]:
     with open(_resolve_config(path)) as fh:
         return yaml.safe_load(fh)
