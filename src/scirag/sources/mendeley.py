@@ -160,37 +160,88 @@ def _to_ncbi(name: str) -> str:
     return f"{surname} {initials}" if initials else surname
 
 
-def _parse_ids(blob: str) -> tuple[str, str]:
-    """Pull (doi, pmid) from the identifiers blob.
+# Max plausible PubMed PMID — comfortably above the current high-water mark
+# (~40M in 2026), used to reject 8-digit Scopus IDs that share the PMID's width.
+_PMID_MAX = 40_000_000
 
-    The PMID is the first 4–8 digit token after the DOI (the ISSN precedes the DOI;
-    Scopus IDs are 11 digits). Returns ("", "") components that aren't present.
+
+def _issn_checksum_ok(token: str) -> bool:
+    """True if an 8-char token is a checksum-valid ISSN.
+
+    The identifiers blob carries the journal ISSN as a bare 8-digit token that
+    collides with the PMID's width; an ISSN's mod-11 check digit lets us tell them
+    apart so the ISSN is never mistaken for a PMID (e.g. Nat Neurosci's 1546-1726).
     """
-    doi = pmid = ""
+    if len(token) != 8 or not token[:7].isdigit():
+        return False
+    if not (token[7].isdigit() or token[7] in "Xx"):
+        return False
+    total = sum(int(d) * (8 - i) for i, d in enumerate(token[:7]))
+    check = (11 - total % 11) % 11
+    return token[7].upper() == ("X" if check == 10 else str(check))
+
+
+def _parse_ids(blob: str) -> tuple[str, str]:
+    """Pull (doi, pmid) from the unlabeled, space-joined identifiers blob.
+
+    Mendeley joins ISSN, DOI, PMID, Scopus IDs and DOI fragments in an order that
+    varies per record, so position is unreliable. The DOI is matched by regex; the
+    PMID is the sole bare integer that's plausibly a PMID — 4–8 digits, ≤ the PMID
+    high-water mark — once checksum-valid ISSNs, DOI fragments (e.g. "00959" → "959")
+    and ≥9-digit / out-of-range Scopus IDs are dropped. Returns ("", "") for absent
+    components; pmid is "" when zero OR more than one candidate survives (ambiguous),
+    leaving the caller to resolve it from the DOI via PubMed.
+    """
+    doi = ""
     m = _DOI_RE.search(blob)
     if m:
         doi = m.group(0).rstrip(".,;)")
-    tokens = blob.split()
-    start = 0
-    if doi:
-        for i, t in enumerate(tokens):
-            if doi in t:
-                start = i + 1
-                break
-    for t in tokens[start:]:
-        if t.isdigit() and 4 <= len(t) <= 8:
-            pmid = t
-            break
+    candidates: list[str] = []
+    for t in blob.split():
+        if not (t.isdigit() and 4 <= len(t) <= 8):
+            continue
+        if doi and t in doi:  # a fragment of the DOI, not a separate identifier
+            continue
+        if _issn_checksum_ok(t):  # the journal ISSN, not a PMID
+            continue
+        if not 1 <= int(t) <= _PMID_MAX:  # an out-of-range Scopus id
+            continue
+        candidates.append(t)
+    pmid = candidates[0] if len(candidates) == 1 else ""
     return doi, pmid
+
+
+def _pmid_from_doi(doi: str) -> str:
+    """Resolve a publisher DOI to its PMID via PubMed esearch, or "" if no match.
+
+    The offline fallback for records whose identifiers blob yields no confident
+    PMID. Best-effort: returns "" on any failure (offline, timeout, no hit) so the
+    caller falls back to a bioRxiv-DOI or `mendeley-<id>` key.
+    """
+    if not doi:
+        return ""
+    try:
+        from scirag.sources import pubmed
+
+        hits = pubmed.search(f"{doi}[doi]", retmax=1)
+    except Exception:
+        return ""
+    return hits[0] if hits else ""
 
 
 def _row_to_article(row: tuple, fulltext: str, file_id: str) -> Article:
     doc_id, title, authors_raw, journal, year_raw, abstract, ids_blob = row
 
     doi, pmid = _parse_ids(ids_blob or "")
+    # bioRxiv preprints stay keyed by their DOI (dedups with /bindex) and aren't in
+    # PubMed, so skip the lookup. Otherwise, when the blob gave no confident PMID,
+    # resolve it from the DOI via PubMed so the record dedups with /index.
+    is_biorxiv = doi.startswith("10.1101/")
+    if not pmid and doi and not is_biorxiv:
+        pmid = _pmid_from_doi(doi)
     if pmid:
         key, source = pmid, "pubmed"
-    elif doi.startswith("10.1101/"):
+    elif is_biorxiv:
         key, source = doi, "biorxiv"
     else:
         key, source = f"mendeley-{doc_id}", "mendeley"

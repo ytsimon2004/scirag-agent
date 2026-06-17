@@ -95,12 +95,13 @@ def get_indexed_articles() -> list[dict]:
 
         seen: set[str] = set()
         articles: list[dict] = []
-        for pmid, title, year, first_author, text_source in zip(
+        for pmid, title, year, first_author, text_source, source in zip(
             metadata_col.field("pmid").to_pylist(),
             metadata_col.field("title").to_pylist(),
             metadata_col.field("year").to_pylist(),
             _col("first_author"),
             _col("text_source"),
+            _col("source"),
         ):
             if pmid and pmid not in seen:
                 seen.add(pmid)
@@ -111,7 +112,9 @@ def get_indexed_articles() -> list[dict]:
                         "year": year or "",
                         "first_author": first_author or "",
                         "text_source": text_source or "",
-                        "origin": origin_of(pmid),
+                        # Prefer the stored source; fall back to shape inference for
+                        # records indexed before `source` was persisted.
+                        "origin": source or origin_of(pmid),
                     }
                 )
         return articles
@@ -142,6 +145,7 @@ def get_indexed_articles_full() -> list[dict]:
         "url",
         "mesh",
         "text_source",
+        "source",
     )
     try:
         db = lancedb.connect(get_active_db_uri())
@@ -162,7 +166,9 @@ def get_indexed_articles_full() -> list[dict]:
             if pmid and pmid not in seen:
                 seen.add(pmid)
                 row = {c: (data[c][i] or "") for c in cols}
-                row["origin"] = origin_of(pmid)
+                # Prefer the stored source; fall back to shape inference for records
+                # indexed before `source` was persisted.
+                row["origin"] = row["source"] or origin_of(pmid)
                 rows.append(row)
         return rows
     except Exception:

@@ -100,6 +100,10 @@ class Article:
             "authors": ", ".join(self.authors),
             "first_author": self.authors[0] if self.authors else "",
             "text_source": self.full_text_kind if self.full_text else "abstract",
+            # Persist the originating source so read-back doesn't have to infer it
+            # from the key's shape (origin_of), which can't distinguish a PubMed
+            # journal DOI from a bioRxiv/IEEE/etc. one for non-PubMed sources.
+            "source": self.source,
         }
 
 
