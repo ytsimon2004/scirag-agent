@@ -1,11 +1,10 @@
-"""Tests for scirag.agents.synthesize — LLM call is mocked."""
+"""Tests for scirag.agents.synthesize._format_sources."""
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-
-from scirag.agents.synthesize import _format_sources, synthesize
+from scirag.agents.synthesize import _format_sources
 
 
 def _make_node(
@@ -63,32 +62,3 @@ class TestFormatSources:
         node.node.get_content.return_value = "text"
         formatted = _format_sources([node])
         assert "[?]" in formatted  # no author → citation falls back to [pmid]
-
-
-class TestSynthesize:
-    def test_calls_complete_with_synthesizer_agent(self):
-        node = _make_node("999", "Title", "2022", "Source text.")
-        with patch(
-            "scirag.agents.synthesize.complete", return_value="Cited answer [999]."
-        ) as mock_complete:
-            answer = synthesize("What are place cells?", [node])
-        mock_complete.assert_called_once()
-        assert mock_complete.call_args[0][0] == "synthesizer"
-        assert answer == "Cited answer [999]."
-
-    def test_query_included_in_messages(self):
-        node = _make_node("1", "T", "2020", "text")
-        with patch("scirag.agents.synthesize.complete", return_value="answer") as mock_complete:
-            synthesize("How do grid cells work?", [node])
-        messages = mock_complete.call_args[0][1]
-        user_msg = next(m["content"] for m in messages if m["role"] == "user")
-        assert "How do grid cells work?" in user_msg
-
-    def test_source_ids_in_messages(self):
-        nodes = [_make_node(str(i), f"T{i}", "2020", f"text {i}") for i in range(3)]
-        with patch("scirag.agents.synthesize.complete", return_value="answer") as mock_complete:
-            synthesize("query", nodes)
-        messages = mock_complete.call_args[0][1]
-        user_msg = next(m["content"] for m in messages if m["role"] == "user")
-        for i in range(3):
-            assert f"[id: {i}]" in user_msg

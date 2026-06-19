@@ -7,8 +7,6 @@ from __future__ import annotations
 
 from llama_index.core.schema import NodeWithScore
 
-from scirag.llm.router import complete
-
 SYSTEM = (
     "You are a scientific literature assistant. Answer ONLY from the provided "
     "sources. Cite every claim with the author-year marker shown in parentheses "
@@ -31,16 +29,3 @@ def _format_sources(nodes: list[NodeWithScore]) -> str:
         header = f"({citation(md)}) {md.get('title', '')} [id: {md.get('pmid', '?')}]"
         blocks.append(f"{header}\n{n.node.get_content()}")
     return "\n\n---\n\n".join(blocks)
-
-
-def synthesize(query: str, nodes: list[NodeWithScore]) -> str:
-    sources = _format_sources(nodes)
-    messages = [
-        {"role": "system", "content": SYSTEM},
-        {
-            "role": "user",
-            "content": f"Question: {query}\n\nSources:\n{sources}\n\n"
-            "Write a concise, cited answer.",
-        },
-    ]
-    return complete("synthesizer", messages, max_tokens=1200)
