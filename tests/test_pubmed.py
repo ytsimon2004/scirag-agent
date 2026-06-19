@@ -75,6 +75,7 @@ def test_article_metadata_keys():
         "authors",
         "first_author",
         "text_source",
+        "source",
     }
     assert md["mesh"] == "memory, hippocampus"
     assert md["doi"] == "10.1038/s41586-000"
