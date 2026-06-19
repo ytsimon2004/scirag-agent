@@ -1129,16 +1129,9 @@ def _mask(value: str) -> str:
 
 def _read_home_env() -> dict[str, str]:
     """Parse ~/.scirag-agent/.env into a dict."""
-    if not _HOME_ENV.exists():
-        return {}
-    result = {}
-    for line in _HOME_ENV.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        k, _, v = line.partition("=")
-        result[k.strip()] = v.strip().strip('"').strip("'")
-    return result
+    from dotenv import dotenv_values
+
+    return {k: v for k, v in dotenv_values(_HOME_ENV).items() if v is not None}
 
 
 def _write_home_env(env: dict[str, str]) -> None:
