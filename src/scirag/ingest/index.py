@@ -70,56 +70,11 @@ def get_indexed_pmids() -> set[str]:
 
 
 def get_indexed_articles() -> list[dict]:
-    """Return deduplicated article metadata (pmid, title, year, first_author, text_source, origin).
-
-    `pmid` holds a PubMed ID for PubMed records and a DOI for bioRxiv preprints
-    (the shared primary key). `origin` ("pubmed" / "biorxiv") is inferred from that
-    key via origin_of(). `text_source` is "results" when the chunk came from
-    full-text Results, else "abstract". `first_author` may be "" for articles
-    indexed before authors were stored, or for PDF imports without resolved metadata.
-    """
-    import lancedb
-    from scirag.projects import get_active_db_uri
-
-    try:
-        db = lancedb.connect(get_active_db_uri())
-        tbl = db.open_table(pipeline_cfg()["index"]["table"])
-        arrow_tbl = tbl.to_lance().to_table(columns=["metadata"])
-        metadata_col = arrow_tbl.column("metadata").combine_chunks()
-        fields = {f.name for f in metadata_col.type}
-
-        def _col(name: str) -> list:
-            if name in fields:
-                return metadata_col.field(name).to_pylist()
-            return [""] * len(metadata_col)
-
-        seen: set[str] = set()
-        articles: list[dict] = []
-        for pmid, title, year, first_author, text_source, source in zip(
-            metadata_col.field("pmid").to_pylist(),
-            metadata_col.field("title").to_pylist(),
-            metadata_col.field("year").to_pylist(),
-            _col("first_author"),
-            _col("text_source"),
-            _col("source"),
-        ):
-            if pmid and pmid not in seen:
-                seen.add(pmid)
-                articles.append(
-                    {
-                        "pmid": pmid,
-                        "title": title or "",
-                        "year": year or "",
-                        "first_author": first_author or "",
-                        "text_source": text_source or "",
-                        # Prefer the stored source; fall back to shape inference for
-                        # records indexed before `source` was persisted.
-                        "origin": source or origin_of(pmid),
-                    }
-                )
-        return articles
-    except Exception:
-        return []
+    """Deduplicated article metadata, the display subset of get_indexed_articles_full():
+    pmid, title, year, first_author, text_source, origin. See that function for the
+    field semantics (primary key, inferred origin, missing-field fallbacks)."""
+    keys = ("pmid", "title", "year", "first_author", "text_source", "origin")
+    return [{k: r[k] for k in keys} for r in get_indexed_articles_full()]
 
 
 def get_indexed_articles_full() -> list[dict]:
