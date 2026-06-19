@@ -11,7 +11,7 @@ the `claude`/`codex` CLIs) — sit behind one LiteLLM router, selectable per age
 
 ## Environment & setup
 - **uv** manages everything. Python 3.11.
-- `uv sync` — install. `--extra all` bundles the light extras (mcp, eval, ui).
+- `uv sync` — install. `--extra all` bundles the light extras (mcp, ui).
   `rerank` is **separate** (`uv sync --extra all --extra rerank`) because it pulls
   sentence-transformers + torch — torch is pinned CPU-only in `[tool.uv.sources]`
   (the reranker just re-scores candidates; all inference is via Ollama), keeping it

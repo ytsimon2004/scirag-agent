@@ -34,7 +34,6 @@ dependencies = [
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.0.0"]
-eval = ["ragas>=0.2.0"]
 ui = ["chainlit>=2.0.0"]
 rerank = ["sentence-transformers>=3.0.0"]   # cross-encoder reranking (bge-reranker-v2-m3); pulls torch
 docs = [   # Sphinx + MyST docs (built on Read the Docs); heavy deps are mocked in conf.py
@@ -45,7 +44,7 @@ docs = [   # Sphinx + MyST docs (built on Read the Docs); heavy deps are mocked 
     "sphinx-copybutton>=0.5",
     "sphinx-design>=0.5",
 ]
-all = ["scirag-agent[mcp,eval,ui]"]   # all optional features; `uv sync --extra all`
+all = ["scirag-agent[mcp,ui]"]   # all optional features; `uv sync --extra all`
 
 # Dev tooling is a dependency-group (PEP 735), so a plain `uv sync` installs it by
 # default — that's what makes the ruff/pre-commit git hook work out of the box.

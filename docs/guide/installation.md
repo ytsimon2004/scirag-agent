@@ -26,14 +26,13 @@ The console script is `scirag`. If it is not on your PATH, prefix any command wi
 ## Optional extras
 
 ```bash
-uv sync --extra all                 # bundles the light extras: mcp, eval, ui
+uv sync --extra all                 # bundles the light extras: mcp, ui
 uv sync --extra all --extra rerank  # also the cross-encoder reranker
 ```
 
 | Extra | Pulls in | Enables |
 |-------|----------|---------|
 | `mcp` | `mcp` | MCP server (`python -m scirag.mcp_server.server`) |
-| `eval` | `ragas` | retrieval/answer evaluation |
 | `ui` | `chainlit` | the web UI (`scirag ui`) |
 | `rerank` | `sentence-transformers` (+ CPU `torch`) | cross-encoder reranking |
 

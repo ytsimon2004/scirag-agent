@@ -98,14 +98,13 @@ So the qwen download is optional — only needed if you want a local LLM.
 
 Pick whichever you need (tool install: `"scirag-agent[ui,rerank] @ git+…"`; dev
 checkout: `uv sync --extra ui --extra rerank`). The `[all]` extra is a shorthand for
-the light ones (`ui`, `mcp`, `eval`) — `rerank` is deliberately left out of it:
+the light ones (`ui`, `mcp`) — `rerank` is deliberately left out of it:
 
 | Extra | Enables |
 |---|---|
 | `ui` | Chainlit web UI (`/ui`) |
 | `rerank` | Cross-encoder reranking (`bge-reranker-v2-m3`); then `/rag rerank on`. Pulls torch |
 | `mcp` | MCP server exposing retrieval as tools |
-| `eval` | RAG evaluation (ragas) |
 
 ---
 
