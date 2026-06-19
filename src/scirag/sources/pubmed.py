@@ -10,6 +10,7 @@ import os
 import time
 import warnings
 from dataclasses import dataclass, field
+from typing import Literal
 from xml.etree import ElementTree as ET
 
 import httpx
@@ -51,15 +52,14 @@ class Article:
     doi: str = ""
     full_text: str = ""
     pub_types: list[str] = field(default_factory=list)
-    # How to label full_text in metadata: "results" (Results section) or "review"
-    # (whole-body text of a review article, which has no Results section).
-    full_text_kind: str = "results"
-    # Origin of the record: "pubmed", "biorxiv", "text", "mendeley", or "zotero".
-    # For bioRxiv preprints the DOI is stored in the `pmid` slot (the system-wide
-    # primary key), so dedup, /show, /remove, and [id] citations work unchanged.
-    # Mendeley/Zotero imports keyed without a PMID/preprint-DOI use a
+    # How full_text is labelled in metadata's text_source: results = Results section,
+    # fulltext = whole article body, review = review-article body, text = free-text import.
+    full_text_kind: Literal["results", "review", "text", "fulltext"] = "results"
+    # Origin of the record. bioRxiv preprints store their DOI in the `pmid` slot (the
+    # system-wide primary key), so dedup, /show, /remove, and [id] citations work
+    # unchanged; Mendeley/Zotero imports without a PMID/preprint-DOI use a
     # "mendeley-<id>"/"zotero-<id>" pmid slot.
-    source: str = "pubmed"
+    source: Literal["pubmed", "biorxiv", "text", "mendeley", "zotero"] = "pubmed"
 
     @property
     def url(self) -> str:
