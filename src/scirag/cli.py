@@ -45,25 +45,6 @@ def _main(ctx: typer.Context) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _patch_escape(question):
-    """Allow Escape to cancel a questionary prompt (returns None like Ctrl+C)."""
-    from prompt_toolkit.key_binding import KeyBindings, merge_key_bindings
-
-    extra = KeyBindings()
-
-    @extra.add("escape")
-    def _escape(event):
-        event.app.exit(result=None)
-
-    app = question.application
-    # Esc leads every ANSI escape sequence (arrows, etc.), so prompt_toolkit waits
-    # ttimeoutlen (default 0.5s) to tell a lone Esc from a sequence. Shorten it so
-    # Esc-to-cancel feels instant; raise toward 0.1–0.15 if used over laggy SSH.
-    app.ttimeoutlen = 0.05
-    app.key_bindings = merge_key_bindings([app.key_bindings, extra]) if app.key_bindings else extra
-    return question
-
-
 def print_article_list(arts, existing: set, pmc_map: dict) -> None:
     for i, a in enumerate(arts, 1):
         in_db = a.pmid in existing
@@ -224,12 +205,12 @@ def do_index(
     _qpc.INDICATOR_SELECTED = "✔"
     _qpc.INDICATOR_UNSELECTED = " "
 
-    selected = _patch_escape(
+    selected = _ask(
         questionary.checkbox(
             "Select articles to index  (space = toggle, a = all, i = invert, enter = confirm):",
             choices=choices,
         )
-    ).ask()
+    )
 
     if not selected:
         console.print("[yellow]Nothing selected.[/]")
@@ -323,12 +304,12 @@ def do_bindex(
     _qpc.INDICATOR_SELECTED = "✔"
     _qpc.INDICATOR_UNSELECTED = " "
 
-    selected = _patch_escape(
+    selected = _ask(
         questionary.checkbox(
             "Select preprints to index  (space = toggle, a = all, i = invert, enter = confirm):",
             choices=choices,
         )
-    ).ask()
+    )
 
     if not selected:
         console.print("[yellow]Nothing selected.[/]")
@@ -407,11 +388,11 @@ _LLM_AGENTS = ("synthesizer", "critic", "planner", "retriever")
 
 
 def _ask(question):
-    """Run a questionary prompt, but also let Esc cancel it (returns None).
+    """Run a questionary prompt, but also let Esc cancel it (returns None like Ctrl+C).
 
-    Questionary only binds Ctrl-C; we add a non-eager Escape binding (non-eager so
-    it doesn't swallow the escape sequences arrow keys send) that exits with None —
-    which callers already treat as 'cancelled / unchanged'."""
+    Questionary only binds Ctrl-C; we add a non-eager Escape binding (non-eager so it
+    doesn't swallow the escape sequences arrow keys send) that exits with None — which
+    callers already treat as 'cancelled / unchanged'."""
     from prompt_toolkit.key_binding import KeyBindings, merge_key_bindings
     from prompt_toolkit.keys import Keys
 
@@ -422,6 +403,10 @@ def _ask(question):
         event.app.exit(result=None)
 
     app = question.application
+    # Esc leads every ANSI escape sequence (arrows, etc.), so prompt_toolkit waits
+    # ttimeoutlen (default 0.5s) to tell a lone Esc from a sequence. Shorten it so
+    # Esc-to-cancel feels instant; raise toward 0.1–0.15 if used over laggy SSH.
+    app.ttimeoutlen = 0.05
     app.key_bindings = merge_key_bindings([app.key_bindings, extra]) if app.key_bindings else extra
     return question.ask()
 
@@ -997,12 +982,12 @@ def _select_and_index(arts: list, library: str) -> None:
     _qpc.INDICATOR_SELECTED = "✔"
     _qpc.INDICATOR_UNSELECTED = " "
 
-    selected = _patch_escape(
+    selected = _ask(
         questionary.checkbox(
             "Select papers to index  (space = toggle, a = all, i = invert, enter = confirm):",
             choices=choices,
         )
-    ).ask()
+    )
 
     if not selected:
         console.print("[yellow]Nothing selected.[/]")
@@ -1464,9 +1449,7 @@ def do_remove(pmids: list[str]) -> None:
         choices = [
             questionary.Choice(title=_choice_title(a), value=a["pmid"]) for a in sorted_articles
         ]
-        selected = _patch_escape(
-            questionary.checkbox("Select articles to remove:", choices=choices)
-        ).ask()
+        selected = _ask(questionary.checkbox("Select articles to remove:", choices=choices))
         if not selected:
             console.print("[dim]Cancelled.[/]")
             return
