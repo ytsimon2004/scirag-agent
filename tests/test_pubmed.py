@@ -7,9 +7,8 @@ from unittest.mock import MagicMock, patch
 from xml.etree import ElementTree as ET
 
 
+from scirag.sources.article import Article, _extract_results_from_jats
 from scirag.sources.pubmed import (
-    Article,
-    _extract_results_from_jats,
     _fetch_pmc_fulltext,
     _parse_article,
     _pmids_to_pmcids,

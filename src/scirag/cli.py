@@ -1027,7 +1027,7 @@ def do_text_index() -> None:
     from datetime import datetime
 
     from scirag.ingest.index import build_index, get_indexed_pmids
-    from scirag.sources.pubmed import Article
+    from scirag.sources.article import Article
 
     console.print("[dim]Enter metadata — press Enter to skip any field.[/]")
 

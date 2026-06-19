@@ -25,7 +25,7 @@ from xml.etree import ElementTree as ET
 
 import httpx
 
-from scirag.sources.pubmed import Article, _extract_results_from_jats
+from scirag.sources.article import Article, _extract_results_from_jats
 
 API = "https://api.biorxiv.org/details/biorxiv"  # bioRxiv: details-by-DOI + jatsxml
 EPMC = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"  # keyword search

@@ -13,7 +13,7 @@ from llama_index.embeddings.ollama import OllamaEmbedding
 from llama_index.vector_stores.lancedb import LanceDBVectorStore
 
 from scirag.config import models_cfg, pipeline_cfg
-from scirag.sources.pubmed import Article
+from scirag.sources.article import Article
 
 
 def _embed_model() -> OllamaEmbedding:

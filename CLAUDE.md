@@ -79,7 +79,10 @@ the `claude`/`codex` CLIs) — sit behind one LiteLLM router, selectable per age
 - `src/scirag/agents/pipeline.py` — canonical RAG pipeline: entity extraction ->
   retrieval -> relevance gating -> grounded-prompt assembly.
 - `src/scirag/agents/synthesize.py` — cited-answer synthesis agent.
-- `src/scirag/sources/pubmed.py` — NCBI E-utilities client (`Article` dataclass).
+- `src/scirag/sources/article.py` — the source-neutral `Article` dataclass (shared
+  record for every source) and the shared JATS Results-section parser. Sources are
+  peers: each imports `Article` from here, not from another source module.
+- `src/scirag/sources/pubmed.py` — NCBI E-utilities client (builds `Article`s).
   `search()` is keyword esearch (Boolean/field syntax); `search_semantic()` ranks the
   same PubMed corpus by relevance via Europe PMC (`SRC:MED`) so a natural-language
   question works (esearch would mangle it — e.g. read "in human" as an `[Author]`).

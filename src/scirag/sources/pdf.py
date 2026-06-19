@@ -19,7 +19,7 @@ from urllib.parse import quote
 import pypdf
 
 from scirag.sources import pubmed
-from scirag.sources.pubmed import Article
+from scirag.sources.article import Article
 
 # DOI anywhere in the extracted text (publisher PDFs print it on the first page).
 _DOI_RE = re.compile(r"10\.\d{4,9}/[-._;()/:A-Za-z0-9]+")

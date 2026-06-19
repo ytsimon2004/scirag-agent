@@ -14,7 +14,7 @@ from scirag.sources.pdf import (
     load_pdf_as_article,
     load_pdf_directory,
 )
-from scirag.sources.pubmed import Article
+from scirag.sources.article import Article
 
 
 # ---------------------------------------------------------------------------

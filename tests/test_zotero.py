@@ -266,7 +266,7 @@ def test_fetch_publisher_doi_resolves_to_pmid(library):
 
 
 def test_fetch_title_resolution_confident_match(library):
-    from scirag.sources.pubmed import Article
+    from scirag.sources.article import Article
 
     real = Article(pmid="44444444", title="Unpublished draft notes xyz", abstract="")
     with (

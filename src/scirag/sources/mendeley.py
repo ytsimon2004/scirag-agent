@@ -35,7 +35,7 @@ from scirag.sources.pdf import (
     extract_results_section,
     extract_text_from_pdf,
 )
-from scirag.sources.pubmed import Article
+from scirag.sources.article import Article
 
 # DOI inside the identifiers blob (publisher DOIs have no spaces).
 _DOI_RE = re.compile(r"10\.\d{4,9}/\S+")

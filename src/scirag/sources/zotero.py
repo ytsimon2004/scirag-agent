@@ -41,7 +41,7 @@ from scirag.sources.pdf import (
     extract_results_section,
     extract_text_from_pdf,
 )
-from scirag.sources.pubmed import Article
+from scirag.sources.article import Article
 
 # PMID inside the `extra` blob, CSL convention: "PMID: 12345678".
 _PMID_RE = re.compile(r"\bPMID:\s*(\d{4,8})\b", re.IGNORECASE)
