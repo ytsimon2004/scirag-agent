@@ -163,8 +163,10 @@ def do_index(
     existing = get_indexed_pmids()
     # Brief pause so the elink call doesn't immediately follow esearch+efetch
     # and hit NCBI's 3 req/s limit (causing silent empty responses).
-    if not __import__("os").getenv("NCBI_API_KEY"):
-        __import__("time").sleep(0.4)
+    if not os.getenv("NCBI_API_KEY"):
+        import time
+
+        time.sleep(0.4)
     pmc_map = _pmids_to_pmcids([a.pmid for a in arts])
 
     def _choice_title(a) -> list:
