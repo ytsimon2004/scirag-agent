@@ -119,6 +119,22 @@ def _complete_codex_cli(messages: list[dict[str, str]], effort: str = "medium") 
     return answer
 
 
+def _completion_kwargs(
+    backend: dict, messages: list[dict[str, str]], temperature: float, max_tokens: int, effort: str
+) -> dict:
+    """Common litellm kwargs shared by the sync and streaming paths."""
+    kwargs: dict = {
+        "model": backend["model"],
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        **_reasoning_kwargs(backend, effort),
+    }
+    if "api_base" in backend:  # local/Ollama backends
+        kwargs["api_base"] = backend["api_base"]
+    return kwargs
+
+
 def complete(
     agent: str,
     messages: list[dict[str, str]],
@@ -138,16 +154,9 @@ def complete(
     if backend["model"] == "codex":
         return _complete_codex_cli(messages, effort)
 
-    kwargs: dict = {
-        "model": backend["model"],
-        "messages": messages,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-        **_reasoning_kwargs(backend, effort),
-    }
-    if "api_base" in backend:  # local/Ollama backends
-        kwargs["api_base"] = backend["api_base"]
-    resp = litellm.completion(**kwargs)
+    resp = litellm.completion(
+        **_completion_kwargs(backend, messages, temperature, max_tokens, effort)
+    )
     return resp["choices"][0]["message"]["content"]
 
 
@@ -172,17 +181,9 @@ async def complete_stream(
         yield _complete_codex_cli(messages, effort)
         return
 
-    kwargs: dict = {
-        "model": backend["model"],
-        "messages": messages,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-        "stream": True,
-        **_reasoning_kwargs(backend, effort),
-    }
-    if "api_base" in backend:
-        kwargs["api_base"] = backend["api_base"]
-    response = await litellm.acompletion(**kwargs)
+    response = await litellm.acompletion(
+        stream=True, **_completion_kwargs(backend, messages, temperature, max_tokens, effort)
+    )
     async for chunk in response:
         token = chunk["choices"][0]["delta"].get("content") or ""
         if token:
